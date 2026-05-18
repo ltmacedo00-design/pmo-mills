@@ -6,101 +6,11 @@
 <title>Mills — PMO Implantação</title>
 
 <!-- Firebase SDK -->
-<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-app-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-database-compat.js"></script>
 <script>
-// ── Firebase — mesmo padrão do teste que funcionou ───
-var firebaseConfig = {
-  apiKey:            "AIzaSyBcGNwhYl3p37mm0H-YJVSRf-cOGy6Rxqo",
-  authDomain:        "mills-pmo-612a8.firebaseapp.com",
-  databaseURL:       "https://mills-pmo-612a8-default-rtdb.firebaseio.com",
-  projectId:         "mills-pmo-612a8",
-  storageBucket:     "mills-pmo-612a8.firebasestorage.app",
-  messagingSenderId: "540691125023",
-  appId:             "1:540691125023:web:e1067bc352bb9739f7d62a"
-};
-var app = firebase.initializeApp(firebaseConfig);
-var db  = firebase.database();
-
-// Expõe db globalmente — simples e direto
-window.DB = db;
-
-// Status de conexão
-db.ref('.info/connected').on('value', function(snap){
-  var dot = document.getElementById('fb-dot');
-  var txt = document.getElementById('fb-txt');
-  if(snap.val() === true){
-    if(dot) dot.style.background = '#2d8a5e';
-    if(txt) txt.textContent = 'Firebase conectado';
-    window.__firebaseOffline = false;
-  } else {
-    if(dot) dot.style.background = '#b05a10';
-    if(txt) txt.textContent = 'Sem conexão';
-    window.__firebaseOffline = true;
-  }
-});
-
-// Listener de projetos — atualiza quando dados mudam no banco
-db.ref('projetos').on('value', function(snap){
-  var val = snap.val() || {};
-  var lista = [];
-  Object.keys(val).forEach(function(k){
-    try {
-      var p = typeof val[k] === 'string' ? JSON.parse(val[k]) : val[k];
-      if(p) lista.push(p);
-    } catch(e){ console.warn('Projeto inválido:', k); }
-  });
-  window.PROJETOS = lista;
-  // Re-renderiza se app já estiver pronto
-  if(window.__appReady){
-    renderHome();
-    renderSidebar();
-    populateKanFilters();
-    populateComercialFilter();
-  }
-  window.__fbLoaded = true;
-});
-
-// Listener de catálogos
-db.ref('catalogo').on('value', function(snap){
-  var val = snap.val() || {};
-  if(val.frota)   window.FROTA_CATALOG = val.frota;
-  if(val.cargos)  window.CARGOS_LIST   = val.cargos;
-  if(val.filiais) window.FILIAIS_LIST  = val.filiais;
-});
-
-// ── Funções de save — idênticas ao teste que funcionou ──
-
-function dbSalvarProjeto(p){
-  if(!p){ console.error('dbSalvarProjeto: projeto nulo'); return; }
-  if(!window.DB){ console.error('dbSalvarProjeto: window.DB nulo'); alert('ERRO: window.DB não existe'); return; }
-  console.log('Salvando projeto:', p.id, p.nome);
-  window.DB.ref('projetos/' + p.id).set(JSON.stringify(p))
-    .then(function(){
-      console.log('Projeto salvo com sucesso:', p.id);
-      mostrarSalvo();
-    })
-    .catch(function(e){
-      console.error('Erro ao salvar projeto:', e.message);
-      alert('ERRO ao salvar: ' + e.message);
-    });
-}
-
-function dbExcluirProjeto(id){
-  if(!id || !window.DB) return;
-  window.DB.ref('projetos/' + id).remove()
-    .catch(function(e){ console.error('Erro ao excluir:', e.message); });
-}
-
-function dbSalvarCatalogo(){
-  if(!window.DB) return;
-  window.DB.ref('catalogo').set({
-    frota:   window.FROTA_CATALOG || [],
-    cargos:  window.CARGOS_LIST   || [],
-    filiais: window.FILIAIS_LIST  || []
-  }).then(function(){ mostrarSalvo(); })
-    .catch(function(e){ console.error('Erro ao salvar catálogo:', e.message); });
-}
+// ── PERSISTÊNCIA: localStorage + Firebase REST (quando disponível) ────────────
+var DB_URL = "https://mills-pmo-612a8-default-rtdb.firebaseio.com";
+var LS_KEY_PROJ = 'mills_pmo_projetos';
+var LS_KEY_CAT  = 'mills_pmo_catalogo';
 
 function mostrarSalvo(){
   var el = document.getElementById('fb-save-indicator');
@@ -109,13 +19,141 @@ function mostrarSalvo(){
   setTimeout(function(){ el.classList.remove('show'); }, 2000);
 }
 
-// Esconde loader após 3s se Firebase não responder
+function atualizarStatusFB(ok, msg){
+  var dot = document.getElementById('fb-dot');
+  var txt = document.getElementById('fb-txt');
+  if(dot) dot.style.background = ok ? '#2d8a5e' : '#b05a10';
+  if(txt) txt.textContent = msg || (ok ? 'Sincronizado' : 'Salvo localmente');
+}
+
+// ── localStorage (sempre funciona) ────────────────────────
+function lsSalvarProjetos(){
+  try { localStorage.setItem(LS_KEY_PROJ, JSON.stringify(window.PROJETOS)); } catch(e){}
+}
+function lsCarregarProjetos(){
+  try {
+    var raw = localStorage.getItem(LS_KEY_PROJ);
+    if(raw) window.PROJETOS = JSON.parse(raw);
+  } catch(e){}
+}
+function lsSalvarCatalogo(){
+  try {
+    localStorage.setItem(LS_KEY_CAT, JSON.stringify({
+      frota: window.FROTA_CATALOG||[],
+      cargos: window.CARGOS_LIST||[],
+      filiais: window.FILIAIS_LIST||[]
+    }));
+  } catch(e){}
+}
+function lsCarregarCatalogo(){
+  try {
+    var raw = localStorage.getItem(LS_KEY_CAT);
+    if(!raw) return;
+    var d = JSON.parse(raw);
+    if(d.frota)   window.FROTA_CATALOG = d.frota;
+    if(d.cargos)  window.CARGOS_LIST   = d.cargos;
+    if(d.filiais) window.FILIAIS_LIST  = d.filiais;
+  } catch(e){}
+}
+
+// ── Firebase REST (tenta sincronizar, falha silenciosamente) ──────────────────
+function fbTentarSalvarProjeto(p){
+  fetch(DB_URL + '/projetos/' + p.id + '.json', {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(p)
+  }).then(function(r){
+    if(r.ok){ atualizarStatusFB(true,'✓ Firebase sincronizado'); }
+  }).catch(function(){
+    atualizarStatusFB(false,'Salvo localmente');
+  });
+}
+function fbTentarExcluirProjeto(id){
+  fetch(DB_URL + '/projetos/' + id + '.json', {method:'DELETE'}).catch(function(){});
+}
+function fbTentarSalvarCatalogo(){
+  fetch(DB_URL + '/catalogo.json', {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      frota: window.FROTA_CATALOG||[],
+      cargos: window.CARGOS_LIST||[],
+      filiais: window.FILIAIS_LIST||[]
+    })
+  }).catch(function(){});
+}
+
+// ── API pública usada pelas funções do PMO ────────────────
+function dbSalvarProjeto(p){
+  if(!p) return;
+  console.log('Salvando:', p.nome);
+  lsSalvarProjetos();      // sempre salva local
+  mostrarSalvo();
+  fbTentarSalvarProjeto(p); // tenta Firebase em background
+}
+function dbExcluirProjeto(id){
+  lsSalvarProjetos();
+  fbTentarExcluirProjeto(id);
+}
+function dbSalvarCatalogo(){
+  lsSalvarCatalogo();
+  mostrarSalvo();
+  fbTentarSalvarCatalogo();
+}
+
+// ── Carregar dados ao iniciar ─────────────────────────────
+lsCarregarProjetos();
+lsCarregarCatalogo();
+atualizarStatusFB(false, 'Dados carregados');
+window.__fbLoaded = true;
+
+// Carregar do Firebase via JSONP (bypassa CORS)
+function fbJsonp(caminho, callback){
+  var cbName = '_fbcb_' + Date.now();
+  var script = document.createElement('script');
+  window[cbName] = function(data){
+    delete window[cbName];
+    if(script.parentNode) script.parentNode.removeChild(script);
+    callback(data);
+  };
+  script.src = DB_URL + '/' + caminho + '.json?callback=' + cbName;
+  script.onerror = function(){ delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); };
+  (document.head || document.documentElement).appendChild(script);
+}
+
+fbJsonp('projetos', function(val){
+  if(!val) return;
+  var lista = Object.keys(val).map(function(k){
+    try { var p=val[k]; return typeof p==='string'?JSON.parse(p):p; }
+    catch(e){ return null; }
+  }).filter(Boolean);
+  if(lista.length > 0){
+    window.PROJETOS = lista;
+    lsSalvarProjetos();
+    if(window.__appReady){
+      renderHome(); renderSidebar();
+      populateKanFilters(); populateComercialFilter();
+    }
+    atualizarStatusFB(true, '✓ Firebase sincronizado');
+    console.log('Projetos carregados do Firebase:', lista.length);
+  }
+});
+
+fbJsonp('catalogo', function(val){
+  if(!val) return;
+  if(val.frota)   window.FROTA_CATALOG = val.frota;
+  if(val.cargos)  window.CARGOS_LIST   = val.cargos;
+  if(val.filiais) window.FILIAIS_LIST  = val.filiais;
+  lsSalvarCatalogo();
+});
+
+// Remover loader
 setTimeout(function(){
   var el = document.getElementById('fb-loader');
   if(el && el.parentNode) el.parentNode.removeChild(el);
-}, 3000);
+}, 1000);
 
-console.log('Firebase inicializado');
+console.log('PMO iniciado — localStorage ativo');
 </script>
 
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
