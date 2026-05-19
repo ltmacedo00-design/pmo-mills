@@ -910,14 +910,35 @@ function wizCreate(){
     var editId = window._editProjId;
     var p=PROJETOS.find(function(x){return x.id===editId;});
     if(p){
-      // Wizard de edição: SOMENTE identificação — nada mais é alterado
-      if(WD.nome)      p.nome      = WD.nome;
-      if(WD.cliente)   p.cliente   = WD.cliente;
-      if(WD.local)     p.local     = WD.local;
-      if(WD.mob)       p.mob       = WD.mob;
-      if(WD.comercial !== undefined) p.comercial = WD.comercial;
-      if(WD.contrato  !== undefined) p.contrato  = WD.contrato;
-      // Frota, RH, apoio, docs, ativos, personalizações: INTOCADOS
+      // Identificação: sempre atualiza o que o usuário pode ter mudado
+      if(WD.nome)    p.nome    = WD.nome;
+      if(WD.cliente) p.cliente = WD.cliente;
+      if(WD.local)   p.local   = WD.local;
+      if(WD.mob)     p.mob     = WD.mob;
+      p.comercial = WD.comercial||p.comercial||'';
+      p.contrato  = WD.contrato||p.contrato||'';
+
+      // Frota: compara campo a campo com o snapshot original
+      // SÓ atualiza o campo se o usuário efetivamente mudou o valor
+      const fm=p.data.find(function(m){return m.area==='frota';});
+      const orig=window._wizOriginal||{equips:[]};
+      if(fm){
+        WD.equips.forEach(function(e,i){
+          const mo=fm.modelos[i];
+          if(!mo) return; // não adiciona novos modelos pelo wizard de edição
+          const o=orig.equips[i]||{};
+          // Só atualiza campo se valor mudou em relação ao original
+          if(e.vlrUnit  !== o.vlrUnit)  mo.vlrUnit  = parseFloat(e.vlrUnit)||0;
+          if(e.capex    !== o.capex)    mo.capex    = parseFloat(e.capex)||0;
+          if(e.mobPrev  !== o.mobPrev)  mo.mobPrev  = e.mobPrev||mo.mobPrev;
+          if(e.cond     !== o.cond)     mo.cond     = e.cond||mo.cond;
+          // Personalização (persList): só atualiza se o usuário tocou na lista
+          const persListChanged = JSON.stringify(e.persList) !== JSON.stringify(o.persList);
+          if(persListChanged) mo.personalizacoes = e.persList;
+          // NUNCA altera: ativos, subgrupos, qtd de ativos, status, datas preenchidas
+        });
+      }
+      window._wizOriginal = null;
       projParaSalvar = p;
     }
     window._editProjId=null;
@@ -2019,9 +2040,53 @@ function openEditWiz(pid,ev){
   if(ev)ev.stopPropagation();
   const p=PROJETOS.find(x=>x.id===pid);if(!p)return;
   wdReset();
-  // Edição: só carrega identificação — frota/RH/apoio/docs gerenciados na lista de tarefas
+  // Step 0: identificação
   WD.nome=p.nome;WD.cliente=p.cliente;WD.local=p.local;WD.mob=p.mob;
   WD.comercial=p.comercial||'';WD.contrato=p.contrato||'';
+  // Step 1: frota — carrega para exibição mas NÃO será usado para recriar ativos
+  const fm=p.data.find(m=>m.area==='frota');
+  if(fm&&fm.modelos.length){
+    WD.equips=fm.modelos.map(function(mo){
+      return {
+        tipo:    mo.tipo||'',
+        modelo:  mo.modelo||'',
+        cond:    mo.cond||'nova',
+        qtd:     mo.subgrupos&&mo.subgrupos[0]?mo.subgrupos[0].ativos.length:(mo.qtd||1),
+        vlrUnit: mo.vlrUnit||0,
+        capex:   mo.capex||0,
+        mobPrev: mo.mobPrev||'',
+        pers:    mo.personalizacoes&&mo.personalizacoes.length>0,
+        persList:[...mo.personalizacoes||[]]
+      };
+    });
+  }
+  // Step 2: RH
+  const rh=p.data.find(m=>m.area==='rh');
+  if(rh&&rh.children&&rh.children.length){
+    const pf=rh.children[0];
+    WD.temContrat=pf.label&&pf.label.toLowerCase().includes('requisi')?true:false;
+    WD.mecanicos=pf.mecanico||'';WD.lider=pf.responsavel||'';
+  }
+  // Step 3: apoio
+  const ap=p.data.find(m=>m.area==='apoio');
+  if(ap&&ap.children){
+    WD.veiculo  =ap.children.some(function(n){return n.label&&n.label.toLowerCase().includes('veículo');});
+    WD.container=ap.children.some(function(n){return n.label&&n.label.toLowerCase().includes('container');});
+  }
+  // Step 4: docs
+  const dm=p.data.find(m=>m.area==='docs');
+  if(dm&&dm.children&&dm.children.length){
+    WD.docs=dm.children.map(function(d){return{nome:d.label||'',prazo:d.dtPrev||''};});
+  }
+  // Snapshot dos valores originais para comparação no save
+  window._wizOriginal = {
+    equips: fm?fm.modelos.map(function(mo,i){return{
+      vlrUnit:mo.vlrUnit||0, capex:mo.capex||0,
+      mobPrev:mo.mobPrev||'', cond:mo.cond||'nova',
+      pers:mo.personalizacoes&&mo.personalizacoes.length>0,
+      persList:[...mo.personalizacoes||[]]
+    };}):[]
+  };
   wizStep=0;window._editProjId=pid;
   document.getElementById('ov-wiz').classList.add('open');renderWiz();
 }
