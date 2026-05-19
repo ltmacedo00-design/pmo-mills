@@ -6,11 +6,91 @@
 <title>Mills — PMO Implantação</title>
 
 <!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-// ── PERSISTÊNCIA: localStorage + Firebase REST (quando disponível) ────────────
-var DB_URL = "https://mills-pmo-612a8-default-rtdb.firebaseio.com";
-var LS_KEY_PROJ = 'mills_pmo_projetos';
-var LS_KEY_CAT  = 'mills_pmo_catalogo';
+// ── Firebase — mesmo padrão do projeto de medição ────────
+const firebaseConfig = {
+  apiKey:            "AIzaSyBcGNwhYl3p37mm0H-YJVSRf-cOGy6Rxqo",
+  authDomain:        "mills-pmo-612a8.firebaseapp.com",
+  databaseURL:       "https://mills-pmo-612a8-default-rtdb.firebaseio.com",
+  projectId:         "mills-pmo-612a8",
+  storageBucket:     "mills-pmo-612a8.firebasestorage.app",
+  messagingSenderId: "540691125023",
+  appId:             "1:540691125023:web:e1067bc352bb9739f7d62a"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const dbRef = db.ref('/');
+
+// Status de conexão em tempo real
+db.ref('.info/connected').on('value', function(snap){
+  var dot = document.getElementById('fb-dot');
+  var txt = document.getElementById('fb-txt');
+  if(snap.val() === true){
+    if(dot) dot.style.background = '#2d8a5e';
+    if(txt) txt.textContent = '● Firebase conectado';
+    window.__firebaseOffline = false;
+  } else {
+    if(dot) dot.style.background = '#b05a10';
+    if(txt) txt.textContent = '● Sem conexão';
+    window.__firebaseOffline = true;
+  }
+});
+
+// Escutar projetos em tempo real
+db.ref('projetos').on('value', function(snap){
+  var val = snap.val() || {};
+  // Atribui ao PROJETOS global (var, não let) — mesma referência que o código usa
+  PROJETOS = Object.keys(val).map(function(k){
+    try {
+      var p = val[k];
+      return typeof p === 'string' ? JSON.parse(p) : p;
+    } catch(e){ return null; }
+  }).filter(Boolean);
+
+  window.__fbLoaded = true;
+  if(window.__appReady){
+    renderHome();
+    renderSidebar();
+    populateKanFilters();
+    populateComercialFilter();
+  }
+});
+
+// Escutar catálogos em tempo real
+db.ref('catalogo').on('value', function(snap){
+  var val = snap.val();
+  if(!val) return;
+  if(val.frota)   FROTA_CATALOG = val.frota;
+  if(val.cargos)  CARGOS_LIST   = val.cargos;
+  if(val.filiais) FILIAIS_LIST  = val.filiais;
+});
+
+// Salvar projeto
+function dbSalvarProjeto(p){
+  if(!p) return;
+  db.ref('projetos/' + p.id).set(JSON.stringify(p))
+    .then(function(){ mostrarSalvo(); })
+    .catch(function(e){ console.error('Erro salvar:', e.message); });
+}
+
+// Excluir projeto
+function dbExcluirProjeto(id){
+  db.ref('projetos/' + id).remove()
+    .catch(function(e){ console.error('Erro excluir:', e.message); });
+}
+
+// Salvar catálogos
+function dbSalvarCatalogo(){
+  db.ref('catalogo').set({
+    frota:   window.FROTA_CATALOG || [],
+    cargos:  window.CARGOS_LIST   || [],
+    filiais: window.FILIAIS_LIST  || []
+  }).then(function(){ mostrarSalvo(); })
+    .catch(function(e){ console.error('Erro catálogo:', e.message); });
+}
 
 function mostrarSalvo(){
   var el = document.getElementById('fb-save-indicator');
@@ -19,141 +99,13 @@ function mostrarSalvo(){
   setTimeout(function(){ el.classList.remove('show'); }, 2000);
 }
 
-function atualizarStatusFB(ok, msg){
-  var dot = document.getElementById('fb-dot');
-  var txt = document.getElementById('fb-txt');
-  if(dot) dot.style.background = ok ? '#2d8a5e' : '#b05a10';
-  if(txt) txt.textContent = msg || (ok ? 'Sincronizado' : 'Salvo localmente');
-}
-
-// ── localStorage (sempre funciona) ────────────────────────
-function lsSalvarProjetos(){
-  try { localStorage.setItem(LS_KEY_PROJ, JSON.stringify(window.PROJETOS)); } catch(e){}
-}
-function lsCarregarProjetos(){
-  try {
-    var raw = localStorage.getItem(LS_KEY_PROJ);
-    if(raw) window.PROJETOS = JSON.parse(raw);
-  } catch(e){}
-}
-function lsSalvarCatalogo(){
-  try {
-    localStorage.setItem(LS_KEY_CAT, JSON.stringify({
-      frota: window.FROTA_CATALOG||[],
-      cargos: window.CARGOS_LIST||[],
-      filiais: window.FILIAIS_LIST||[]
-    }));
-  } catch(e){}
-}
-function lsCarregarCatalogo(){
-  try {
-    var raw = localStorage.getItem(LS_KEY_CAT);
-    if(!raw) return;
-    var d = JSON.parse(raw);
-    if(d.frota)   window.FROTA_CATALOG = d.frota;
-    if(d.cargos)  window.CARGOS_LIST   = d.cargos;
-    if(d.filiais) window.FILIAIS_LIST  = d.filiais;
-  } catch(e){}
-}
-
-// ── Firebase REST (tenta sincronizar, falha silenciosamente) ──────────────────
-function fbTentarSalvarProjeto(p){
-  fetch(DB_URL + '/projetos/' + p.id + '.json', {
-    method: 'PUT',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(p)
-  }).then(function(r){
-    if(r.ok){ atualizarStatusFB(true,'✓ Firebase sincronizado'); }
-  }).catch(function(){
-    atualizarStatusFB(false,'Salvo localmente');
-  });
-}
-function fbTentarExcluirProjeto(id){
-  fetch(DB_URL + '/projetos/' + id + '.json', {method:'DELETE'}).catch(function(){});
-}
-function fbTentarSalvarCatalogo(){
-  fetch(DB_URL + '/catalogo.json', {
-    method: 'PUT',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      frota: window.FROTA_CATALOG||[],
-      cargos: window.CARGOS_LIST||[],
-      filiais: window.FILIAIS_LIST||[]
-    })
-  }).catch(function(){});
-}
-
-// ── API pública usada pelas funções do PMO ────────────────
-function dbSalvarProjeto(p){
-  if(!p) return;
-  console.log('Salvando:', p.nome);
-  lsSalvarProjetos();      // sempre salva local
-  mostrarSalvo();
-  fbTentarSalvarProjeto(p); // tenta Firebase em background
-}
-function dbExcluirProjeto(id){
-  lsSalvarProjetos();
-  fbTentarExcluirProjeto(id);
-}
-function dbSalvarCatalogo(){
-  lsSalvarCatalogo();
-  mostrarSalvo();
-  fbTentarSalvarCatalogo();
-}
-
-// ── Carregar dados ao iniciar ─────────────────────────────
-lsCarregarProjetos();
-lsCarregarCatalogo();
-atualizarStatusFB(false, 'Dados carregados');
-window.__fbLoaded = true;
-
-// Carregar do Firebase via JSONP (bypassa CORS)
-function fbJsonp(caminho, callback){
-  var cbName = '_fbcb_' + Date.now();
-  var script = document.createElement('script');
-  window[cbName] = function(data){
-    delete window[cbName];
-    if(script.parentNode) script.parentNode.removeChild(script);
-    callback(data);
-  };
-  script.src = DB_URL + '/' + caminho + '.json?callback=' + cbName;
-  script.onerror = function(){ delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); };
-  (document.head || document.documentElement).appendChild(script);
-}
-
-fbJsonp('projetos', function(val){
-  if(!val) return;
-  var lista = Object.keys(val).map(function(k){
-    try { var p=val[k]; return typeof p==='string'?JSON.parse(p):p; }
-    catch(e){ return null; }
-  }).filter(Boolean);
-  if(lista.length > 0){
-    window.PROJETOS = lista;
-    lsSalvarProjetos();
-    if(window.__appReady){
-      renderHome(); renderSidebar();
-      populateKanFilters(); populateComercialFilter();
-    }
-    atualizarStatusFB(true, '✓ Firebase sincronizado');
-    console.log('Projetos carregados do Firebase:', lista.length);
-  }
-});
-
-fbJsonp('catalogo', function(val){
-  if(!val) return;
-  if(val.frota)   window.FROTA_CATALOG = val.frota;
-  if(val.cargos)  window.CARGOS_LIST   = val.cargos;
-  if(val.filiais) window.FILIAIS_LIST  = val.filiais;
-  lsSalvarCatalogo();
-});
-
-// Remover loader
+// Remover loader após 3s
 setTimeout(function(){
   var el = document.getElementById('fb-loader');
   if(el && el.parentNode) el.parentNode.removeChild(el);
-}, 1000);
+}, 3000);
 
-console.log('PMO iniciado — localStorage ativo');
+console.log('Firebase inicializado — SDK gstatic');
 </script>
 
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
@@ -832,16 +784,16 @@ let CARGOS_LIST=[];   // [string]
 let FILIAIS_LIST=[];  // [string]
 let importTab=0;      // 0=frota 1=cargos 2=filiais
 
-let uid=1; const nid=()=>'n'+(uid++);
-let expState={};
-let activeFilter='todos';
-let currentProjId=null;
-let ganttExpanded=true;
-let kanView='frota';
-let delProjId=null;
-let PROJETOS=[];
-let currentNtab=0;
-let dragSrc=null; // {aId, projId}
+var uid=1; const nid=()=>'n'+(uid++);
+var expState={};
+var activeFilter='todos';
+var currentProjId=null;
+var ganttExpanded=true;
+var kanView='frota';
+var delProjId=null;
+var PROJETOS=[];       // var = window.PROJETOS — listener do Firebase atualiza corretamente
+var currentNtab=0;
+var dragSrc=null; // {aId, projId}
 
 // ── UTILS ──────────────────────────────────
 const today=()=>new Date().toISOString().slice(0,10);
@@ -914,27 +866,29 @@ function wizSave(){if(wizStep===0){['nome','cliente','local','contrato','mob','c
 function wizNext(){wizSave();if(wizStep===WIZ_STEPS.length-1){wizCreate();return;}wizStep++;renderWiz();}
 function wizPrev(){if(wizStep>0){wizSave();wizStep--;renderWiz();}}
 function wizCreate(){
+  var projParaSalvar = null;
   if(window._editProjId){
-    const p=PROJETOS.find(x=>x.id===window._editProjId);
+    // Edição: captura o id ANTES de zerar
+    var editId = window._editProjId;
+    var p=PROJETOS.find(function(x){return x.id===editId;});
     if(p){
       p.nome=WD.nome||p.nome;p.cliente=WD.cliente||p.cliente;p.local=WD.local||p.local;
       p.mob=WD.mob||p.mob;p.comercial=WD.comercial||p.comercial;
       const fm=p.data.find(m=>m.area==='frota');
       if(fm){fm.modelos=WD.equips.filter(e=>e.tipo&&e.modelo&&e.qtd>0).map(e=>{const pers=e.pers?e.persList:[];return mkModelo(e.tipo,e.modelo,parseInt(e.qtd)||1,e.mobPrev||p.mob,pers,parseFloat(e.vlrUnit)||0,e.cond||'nova',parseFloat(e.capex)||0);});}
+      projParaSalvar = p; // referência direta, sem find posterior
     }
     window._editProjId=null;
   } else {
-    const p={id:'p'+uid++,nome:WD.nome||'Novo projeto',cliente:WD.cliente||'—',local:WD.local||'—',mob:WD.mob||today(),comercial:WD.comercial||'',data:buildData()};
-    PROJETOS.push(p);
+    // Novo projeto: cria, empurra, e guarda referência direta
+    var novoProj={id:'p'+uid++,nome:WD.nome||'Novo projeto',cliente:WD.cliente||'—',local:WD.local||'—',mob:WD.mob||today(),comercial:WD.comercial||'',data:buildData()};
+    PROJETOS.push(novoProj);
+    projParaSalvar = novoProj; // referência direta, sem find posterior
+    window._editProjId=null;
   }
-  var _savedId = window._editProjId || (PROJETOS.length ? PROJETOS[PROJETOS.length-1].id : null);
-  window._editProjId = null;
   closeWiz();renderHome();renderSidebar();populateKanFilters();populateComercialFilter();
-  // Salvar no Firebase
-  console.log('wizCreate: _savedId=', _savedId, 'PROJETOS.length=', PROJETOS.length);
-  var proj = PROJETOS.find(function(p){ return p.id === _savedId; });
-  console.log('wizCreate: proj encontrado=', proj ? proj.nome : 'NÃO ENCONTRADO');
-  if(proj) dbSalvarProjeto(proj);
+  // Salvar no Firebase — usa referência direta capturada acima
+  if(projParaSalvar) dbSalvarProjeto(projParaSalvar);
 }
 function buildData(){
   const base=WD.mob||today();const data=[];
@@ -1295,7 +1249,7 @@ function onDrop(ev,col){
   if(!dragSrc)return;
   const newStatus=col.dataset.status;
   const res=findGlobal(dragSrc.aId);
-  if(res){res.node.status=newStatus;renderKanban();renderHome();renderSidebar();}
+  if(res){res.node.status=newStatus;renderKanban();renderHome();renderSidebar();dbSalvarProjeto(res.proj);}
   dragSrc=null;
 }
 
@@ -1406,8 +1360,8 @@ function addMacroN(){
   const n={id:nid(),_macro:true,area:'outro',label:l,icon:'◆',children:[]};
   expState[n.id]=true;p.data.push(n);renderLista();
 }
-function addAtivoSg(sgId,mob,pj){const sg=findG(sgId);if(!sg)return;sg.ativos.push(mkAtivo(sg.ativos.length+1,mob,JSON.parse(pj),sg.cond));expState[sgId]=true;renderLista();}
-function addPersA(aId){const l=prompt('Personalização:');if(!l)return;const a=findG(aId);if(!a)return;const pn={id:nid(),_pers:true,label:l,status:'sp-req',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:''};expState[pn.id]=true;a.personalizacoes.push(pn);expState[aId]=true;renderLista();}
+function addAtivoSg(sgId,mob,pj){const sg=findG(sgId);if(!sg)return;sg.ativos.push(mkAtivo(sg.ativos.length+1,mob,JSON.parse(pj),sg.cond));expState[sgId]=true;renderLista();const _ap=getProj();if(_ap)dbSalvarProjeto(_ap);}
+function addPersA(aId){const l=prompt('Personalização:');if(!l)return;const a=findG(aId);if(!a)return;const pn={id:nid(),_pers:true,label:l,status:'sp-req',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:''};expState[pn.id]=true;a.personalizacoes.push(pn);expState[aId]=true;renderLista();const _pp=getProj();if(_pp)dbSalvarProjeto(_pp);}
 function inpName(id,val,w){
   const dlId='dl-'+id;
   const dl=FROTA_CATALOG.length?`<datalist id="${dlId}">${FROTA_CATALOG.map(a=>`<option value="${a.numAtivo}">${a.numAtivo} — ${a.tipo} ${a.modelo}</option>`).join('')}</datalist>`:'';
@@ -1693,8 +1647,8 @@ function onDragOverProj(ev){ev.preventDefault();ev.currentTarget.classList.add('
 function onDropProj(ev,col){
   ev.preventDefault();col.classList.remove('drag-over');
   const newStatus=col.dataset.status;const colType=col.dataset.type;
-  if(dragSrcPers&&colType==='pers'){const res=findGlobal(dragSrcPers.prid);if(res){res.node.status=newStatus;renderKanProjFrota(getProj());}dragSrcPers=null;return;}
-  if(dragSrc){const res=findGlobal(dragSrc.aId);if(res){res.node.status=newStatus;renderKanProjFrota(getProj());renderKPIs();}dragSrc=null;return;}
+  if(dragSrcPers&&colType==='pers'){const res=findGlobal(dragSrcPers.prid);if(res){res.node.status=newStatus;renderKanProjFrota(getProj());dbSalvarProjeto(res.proj);}dragSrcPers=null;return;}
+  if(dragSrc){const res=findGlobal(dragSrc.aId);if(res){res.node.status=newStatus;renderKanProjFrota(getProj());renderKPIs();dbSalvarProjeto(res.proj);}dragSrc=null;return;}
 }
 
 function renderKanProjGeral(p){
@@ -1709,7 +1663,7 @@ let kpDragSrc=null;
 function onKPDragStart(ev){kpDragSrc=ev.currentTarget.dataset.aid;ev.currentTarget.classList.add('dragging');ev.dataTransfer.effectAllowed='move';}
 function onKPDragEnd(ev){ev.currentTarget.classList.remove('dragging');document.querySelectorAll('.kan-col-wrap').forEach(c=>c.classList.remove('drag-over'));}
 function onKPDragOver(ev){ev.preventDefault();ev.dataTransfer.dropEffect='move';ev.currentTarget.classList.add('drag-over');}
-function onKPDrop(ev,col){ev.preventDefault();col.classList.remove('drag-over');if(!kpDragSrc)return;const newSt=col.dataset.status;const n=findG(kpDragSrc);if(n){n.status=newSt;renderKanProj();renderKPIs();renderHome();renderSidebar();}kpDragSrc=null;}
+function onKPDrop(ev,col){ev.preventDefault();col.classList.remove('drag-over');if(!kpDragSrc)return;const newSt=col.dataset.status;const n=findG(kpDragSrc);if(n){n.status=newSt;renderKanProj();renderKPIs();renderHome();renderSidebar();const _kpp=getProj();if(_kpp)dbSalvarProjeto(_kpp);}kpDragSrc=null;}
 
 // ── CAPEX na Visão Comercial ──────────────────────────
 function renderCapexSection(ps){
@@ -2009,6 +1963,7 @@ function parseFiliais(){
     +'<strong>'+FILIAIS_LIST.length+' filial(is)</strong> importada(s) com sucesso.<br>'
     +'<div style="margin-top:6px;">'+FILIAIS_LIST.map(function(f){return '<span style="font-size:10px;background:var(--white);border:1px solid var(--border-soft);border-radius:4px;padding:1px 6px;margin:2px;display:inline-block;">'+f+'</span>';}).join('')+'</div>'
     +'</div>';
+  dbSalvarCatalogo();
 }
 function parseCargos(){
   const raw=document.getElementById('paste-cargos').value.trim();
