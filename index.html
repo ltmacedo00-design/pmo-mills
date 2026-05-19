@@ -910,89 +910,15 @@ function wizCreate(){
     var editId = window._editProjId;
     var p=PROJETOS.find(function(x){return x.id===editId;});
     if(p){
-      p.nome=WD.nome||p.nome;p.cliente=WD.cliente||p.cliente;p.local=WD.local||p.local;
-      p.mob=WD.mob||p.mob;p.comercial=WD.comercial||p.comercial;
-      const fm=p.data.find(m=>m.area==='frota');
-      if(fm){
-        // Merge por ÍNDICE: WD.equips[i] corresponde a fm.modelos[i]
-        // Isso garante que nenhum equipamento seja perdido ou reordenado
-        var novaListaModelos = [];
-        WD.equips.forEach(function(e, i){
-          var qtdNova = parseInt(e.qtd)||1;
-          var mobPrev = e.mobPrev||p.mob;
-          // Modelo existente na mesma posição (índice) — preserva ativos
-          var moExist = fm.modelos[i];
-          if(moExist){
-            // Atualiza SOMENTE os campos que o usuário pode ter alterado no wizard
-            // NÃO recria ativos — preserva status/datas/filial preenchidos
-            if(e.tipo)  moExist.tipo   = e.tipo;
-            if(e.modelo)moExist.modelo = e.modelo;
-            if(e.tipo && e.modelo) moExist.label = e.tipo+' — '+e.modelo;
-            moExist.vlrUnit = parseFloat(e.vlrUnit)||moExist.vlrUnit||0;
-            moExist.capex   = parseFloat(e.capex)||moExist.capex||0;
-            moExist.mobPrev = e.mobPrev||moExist.mobPrev||p.mob;
-            // Condição: só atualiza se o usuário explicitamente mudou (diferente do original)
-            if(e.cond) moExist.cond = e.cond;
-            moExist.qtd = qtdNova;
-            // Ajusta quantidade de ativos sem destruir os existentes
-            var sg = moExist.subgrupos && moExist.subgrupos[0];
-            if(sg){
-              while(sg.ativos.length < qtdNova){
-                sg.ativos.push(mkAtivo(sg.ativos.length+1, mobPrev, [], moExist.cond||'nova'));
-              }
-              if(sg.ativos.length > qtdNova){
-                sg.ativos = sg.ativos.slice(0, qtdNova);
-              }
-            }
-            novaListaModelos.push(moExist);
-          } else {
-            // Equipamento novo adicionado no wizard: cria do zero
-            var pers = e.pers ? e.persList : [];
-            novaListaModelos.push(mkModelo(e.tipo||'',e.modelo||'',qtdNova,mobPrev,pers,parseFloat(e.vlrUnit)||0,e.cond||'nova',parseFloat(e.capex)||0));
-          }
-        });
-        fm.modelos = novaListaModelos;
-      }
-      // Atualizar seções RH, apoio e docs se o usuário interagiu com essas etapas
-      // (temContrat !== null significa que o usuário escolheu algo na etapa 2)
-      if(WD.temContrat !== null){
-        const rh=p.data.find(m=>m.area==='rh');
-        if(rh){
-          rh.children=[];
-          const base=p.mob||today();
-          if(WD.temContrat===true){
-            ['Abertura de requisição de RH','Processo seletivo','Integração e treinamento','Solicitação de ferramental'].forEach(function(l,i){rh.children.push(mkNode(l,{dtPrev:addDays(base,-35+i*8)}));});
-            (WD.cargosLista||[]).forEach(function(cargo){rh.children.push(mkNode('Contratar: '+cargo,{dtPrev:WD.prazoRH||addDays(base,-10)}));});
-          } else {
-            rh.children.push(mkNode('Designação de mecânico',{dtPrev:addDays(base,-30),mecanico:WD.mecanicos,responsavel:WD.lider}));
-            rh.children.push(mkNode('Comunicação à equipe',{dtPrev:addDays(base,-25),mecanico:WD.mecanicos,responsavel:WD.lider}));
-          }
-          rh.children.push(mkNode('Mobilização do mecânico',{dtPrev:addDays(base,-5),mecanico:WD.mecanicos,responsavel:WD.lider}));
-        }
-      }
-      // Apoio: só atualiza se o usuário escolheu algo (veiculo !== null)
-      if(WD.veiculo !== null || WD.container !== null){
-        const apoio=p.data.find(m=>m.area==='apoio');
-        if(apoio){
-          const base=p.mob||today();
-          // Preservar filhos existentes e adicionar/remover conforme escolha
-          apoio.children=apoio.children||[];
-          // Remover veículo e container antigos
-          apoio.children=apoio.children.filter(function(n){return !n.label||(!n.label.includes('veículo')&&!n.label.includes('Container'));});
-          if(WD.veiculo===true)apoio.children.unshift(mkNode('Locação veículo leve — '+(WD.veiculoTipo||'Pickup'),{dtPrev:addDays(base,-10)}));
-          if(WD.container===true)apoio.children.unshift(mkNode('Container de peças',{dtPrev:addDays(base,-12)}));
-        }
-      }
-      // Docs: só atualiza se há documentos preenchidos
-      const docsFilled=WD.docs.filter(function(d){return d.nome;});
-      if(docsFilled.length){
-        const docsM=p.data.find(m=>m.area==='docs');
-        if(docsM){
-          const base=p.mob||today();
-          docsM.children=docsFilled.map(function(d){return mkNode(d.nome,{dtPrev:d.prazo||addDays(base,-7)});});
-        }
-      }
-      projParaSalvar = p; // referência direta, sem find posterior
+      // Wizard de edição: SOMENTE identificação — nada mais é alterado
+      if(WD.nome)      p.nome      = WD.nome;
+      if(WD.cliente)   p.cliente   = WD.cliente;
+      if(WD.local)     p.local     = WD.local;
+      if(WD.mob)       p.mob       = WD.mob;
+      if(WD.comercial !== undefined) p.comercial = WD.comercial;
+      if(WD.contrato  !== undefined) p.contrato  = WD.contrato;
+      // Frota, RH, apoio, docs, ativos, personalizações: INTOCADOS
+      projParaSalvar = p;
     }
     window._editProjId=null;
   } else {
@@ -1517,6 +1443,31 @@ function addMacroN(){
   dbSalvarProjeto(p);
 }
 function addAtivoSg(sgId,mob,pj){const sg=findG(sgId);if(!sg)return;sg.ativos.push(mkAtivo(sg.ativos.length+1,mob,JSON.parse(pj),sg.cond));expState[sgId]=true;renderLista();const _ap=getProj();if(_ap)dbSalvarProjeto(_ap);}
+
+// Adicionar ativo diretamente pelo modelo (com atualização de qtd)
+function addAtivoMo(moId){
+  const p=getProj();if(!p)return;
+  const mo=findG(moId);if(!mo)return;
+  const sg=mo.subgrupos&&mo.subgrupos[0];if(!sg)return;
+  const novoAtivo=mkAtivo(sg.ativos.length+1,mo.mobPrev||p.mob,[],mo.cond||'nova');
+  sg.ativos.push(novoAtivo);
+  mo.qtd=sg.ativos.length; // atualiza contagem
+  expState[moId]=true;expState[sg.id]=true;expState[novoAtivo.id]=true;
+  renderLista();renderKPIs();
+  dbSalvarProjeto(p);
+}
+
+// Remover último ativo do modelo (com atualização de qtd)
+function remAtivoMo(moId){
+  const p=getProj();if(!p)return;
+  const mo=findG(moId);if(!mo)return;
+  const sg=mo.subgrupos&&mo.subgrupos[0];if(!sg||sg.ativos.length===0)return;
+  if(!confirm('Remover o último ativo de '+mo.label+'? Os dados deste ativo serão perdidos.'))return;
+  sg.ativos.pop();
+  mo.qtd=sg.ativos.length;
+  renderLista();renderKPIs();
+  dbSalvarProjeto(p);
+}
 function addPersA(aId){const l=prompt('Personalização:');if(!l)return;const a=findG(aId);if(!a)return;const pn={id:nid(),_pers:true,label:l,status:'sp-req',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:''};expState[pn.id]=true;a.personalizacoes.push(pn);expState[aId]=true;renderLista();const _pp=getProj();if(_pp)dbSalvarProjeto(_pp);}
 function inpName(id,val,w){
   const dlId='dl-'+id;
@@ -1543,7 +1494,23 @@ function renderLista(){
     if(macro.area==='frota'){
       macro.modelos.forEach(mo=>{
         const moOpen=expState[mo.id];const moCols=COL_F;const condTag=mo.cond==='nova'?'<span style="font-size:9px;background:var(--blue-bg);color:var(--blue);border-radius:3px;padding:1px 5px;">nova</span>':'<span style="font-size:9px;background:var(--amber-bg);color:var(--amber);border-radius:3px;padding:1px 5px;">usada</span>';
-        rows+=`<tr class="r-s1"><td class="scol" style="background:var(--surface2);"><div style="display:flex;align-items:center;gap:4px;padding-left:14px;"><span class="chev ${moOpen?'open':''}" onclick="toggleExp('${mo.id}')">▶</span><strong>${mo.label}</strong>${condTag}${mo.personalizacoes&&mo.personalizacoes.length?`<span style="font-size:9px;background:var(--accent-dim);color:var(--accent);border-radius:4px;padding:1px 5px;">pers.</span>`:''}</div></td><td style="white-space:nowrap;"><span style="font-size:10px;color:var(--accent);font-weight:600;">${mo.qtd} un. · teto ${fmtD(mo.mobPrev)}</span>${mo.vlrUnit>0?`<span style="font-size:9.5px;color:var(--text-muted);margin-left:6px;">${fmtCur(mo.vlrUnit)}/un.</span>`:''}</td>${showFrota?'<td></td>':''}<td></td>${empN(moCols.length-1)}<td></td></tr>`;
+        const sgId0 = mo.subgrupos&&mo.subgrupos[0]?mo.subgrupos[0].id:'';
+        const atCnt = mo.subgrupos&&mo.subgrupos[0]?mo.subgrupos[0].ativos.length:0;
+        const persModel = JSON.stringify(mo.personalizacoes||[]).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        rows+=`<tr class="r-s1"><td class="scol" style="background:var(--surface2);">
+          <div style="display:flex;align-items:center;gap:4px;padding-left:14px;">
+            <span class="chev ${moOpen?'open':''}" onclick="toggleExp('${mo.id}')">▶</span>
+            <strong>${mo.label}</strong>${condTag}
+            <span style="font-size:10px;color:var(--accent);font-weight:600;margin-left:4px;">${atCnt} un.</span>
+            <button class="add-btn" style="margin-left:6px;" onclick="addAtivoMo('${mo.id}')" title="Adicionar ativo">+ ativo</button>
+            ${atCnt>0?`<button class="add-btn" style="background:var(--red-bg);color:var(--red);border-color:var(--red);" onclick="remAtivoMo('${mo.id}')" title="Remover último ativo">− ativo</button>`:''}
+          </div>
+        </td>
+        <td style="white-space:nowrap;">
+          <span style="font-size:10px;color:var(--text-dim);">teto ${fmtD(mo.mobPrev)}</span>
+          ${mo.vlrUnit>0?`<span style="font-size:9.5px;color:var(--text-muted);margin-left:6px;">${fmtCur(mo.vlrUnit)}/un.</span>`:''}
+        </td>
+        ${showFrota?'<td></td>':''}<td></td>${empN(moCols.length-1)}<td></td></tr>`;
         if(!moOpen)return;
         mo.subgrupos.forEach(sg=>{
           sg.ativos.forEach(a=>{
@@ -1552,10 +1519,10 @@ function renderLista(){
             const aExec=hP?a.personalizacoes.reduce((s,pr)=>s+(parseFloat(pr.prcExec)||0),0):parseFloat(a.prcExec)||0;
             const orcCell=aOrc>0?`<span style="font-size:10px;color:var(--blue);font-weight:500;">${fmtCur(aOrc)}</span>${hP?'<span style="font-size:9px;color:var(--text-muted);"> Σ</span>':''}`:'—';
             const execCell=aExec>0?`<span style="font-size:10px;color:var(--green);font-weight:500;">${fmtCur(aExec)}</span>`:'—';
-            rows+=`<tr class="r-s2"><td class="scol" style="background:var(--white);"><div style="display:flex;align-items:center;gap:2px;padding-left:26px;">${hP?`<span class="chev ${aOpen?'open':''}" onclick="toggleExp('${a.id}')">▶</span>`:'<span style="width:10px;display:inline-block;"></span>'} ${inpName(a.id,a.label,100)}</div></td><td>${selSt(a.id,a.status,SF_ATIVO)}</td>${showFrota?`<td>${selFilial(a.id,a.filial)}</td>`:''}<td>${iD(a.id,'dtPrev',a.dtPrev,true)}</td>${dCells(a,moCols.slice(1,5),SF_ATIVO)}<td>${orcCell}</td><td>${execCell}</td><td>${(aOrc>0||aExec>0)?calcD(aOrc,aExec):'—'}</td><td>${iT(a.id,'obs',a.obs,'Obs...')}</td><td><button class="add-btn" onclick="addPersA('${a.id}')">+</button></td></tr>`;
+            rows+=`<tr class="r-s2"><td class="scol" style="background:var(--white);"><div style="display:flex;align-items:center;gap:2px;padding-left:26px;">${hP?`<span class="chev ${aOpen?'open':''}" onclick="toggleExp('${a.id}')">▶</span>`:'<span style="width:10px;display:inline-block;"></span>'} ${inpName(a.id,a.label,100)}</div></td><td>${selSt(a.id,a.status,SF_ATIVO)}</td>${showFrota?`<td>${selFilial(a.id,a.filial)}</td>`:''}<td>${iD(a.id,'dtPrev',a.dtPrev,true)}</td>${dCells(a,moCols.slice(1,5),SF_ATIVO)}<td>${orcCell}</td><td>${execCell}</td><td>${(aOrc>0||aExec>0)?calcD(aOrc,aExec):'—'}</td><td>${iT(a.id,'obs',a.obs,'Obs...')}</td><td style="white-space:nowrap;"><button class="add-btn" onclick="addPersA('${a.id}')" title="Add preparação">🔧</button></td></tr>`;
             if(aOpen&&hP)a.personalizacoes.forEach(pr=>{rows+=`<tr class="r-s3"><td class="scol" style="background:#fafcfd;"><div style="display:flex;align-items:center;gap:4px;padding-left:40px;"><span style="color:var(--accent);font-size:10px;">🔧</span><span style="font-size:11px;color:var(--text-mid);">${pr.label}</span></div></td><td>${selSt(pr.id,pr.status,SF_PERS)}</td>${showFrota?'<td></td>':''}<td>${iD(pr.id,'dtPrev',pr.dtPrev,true)}</td>${dCells(pr,moCols.slice(1),SF_PERS)}<td></td></tr>`;});
           });
-          rows+=`<tr class="r-s2"><td class="scol" colspan="${moCols.length+(showFrota?1:0)+3}" style="background:var(--white);padding-left:26px;"><button class="add-btn" onclick="addAtivoSg('${sg.id}','${mo.mobPrev}','${JSON.stringify(mo.personalizacoes||[]).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">+ ativo</button></td></tr>`;
+          // botão + ativo agora está na linha do modelo
         });
       });
     }else if(macro.children){
@@ -2052,40 +2019,9 @@ function openEditWiz(pid,ev){
   if(ev)ev.stopPropagation();
   const p=PROJETOS.find(x=>x.id===pid);if(!p)return;
   wdReset();
-  // Step 0: identificação
-  WD.nome=p.nome;WD.cliente=p.cliente;WD.local=p.local;WD.mob=p.mob;WD.comercial=p.comercial||'';WD.contrato=p.contrato||'';
-  // Step 1: frota
-  const fm=p.data.find(m=>m.area==='frota');
-  if(fm&&fm.modelos.length){
-    WD.equips=fm.modelos.map(mo=>({tipo:mo.tipo||'',modelo:mo.modelo||'',cond:mo.cond||'nova',qtd:mo.qtd||1,vlrUnit:mo.vlrUnit||0,capex:mo.capex||0,mobPrev:mo.mobPrev||'',pers:mo.personalizacoes&&mo.personalizacoes.length>0,persList:[...mo.personalizacoes||[]]}));
-  }
-  // Step 2: mão de obra — ler do projeto existente
-  const rh=p.data.find(m=>m.area==='rh');
-  if(rh){
-    // Detectar se tinha contratação: se primeiro filho é "Abertura de requisição de RH"
-    const primeiroFilho=rh.children&&rh.children[0];
-    if(primeiroFilho&&primeiroFilho.label&&primeiroFilho.label.includes('requisição')){
-      WD.temContrat=true;
-    } else if(primeiroFilho){
-      WD.temContrat=false;
-      // Ler mecânico e responsável do primeiro nó
-      WD.mecanicos=primeiroFilho.mecanico||'';
-      WD.lider=primeiroFilho.responsavel||'';
-    }
-  }
-  // Step 3: apoio e logística — ler do projeto existente
-  const apoio=p.data.find(m=>m.area==='apoio');
-  if(apoio&&apoio.children){
-    WD.veiculo=apoio.children.some(function(n){return n.label&&n.label.includes('veículo');});
-    WD.container=apoio.children.some(function(n){return n.label&&n.label.includes('Container');});
-    const outros=apoio.children.find(function(n){return n.label&&!n.label.includes('veículo')&&!n.label.includes('Container');});
-    if(outros)WD.outros=outros.label||'';
-  }
-  // Step 4: documentos — ler do projeto existente
-  const docsM=p.data.find(m=>m.area==='docs');
-  if(docsM&&docsM.children&&docsM.children.length){
-    WD.docs=docsM.children.map(function(d){return{nome:d.label||'',prazo:d.dtPrev||''};});
-  }
+  // Edição: só carrega identificação — frota/RH/apoio/docs gerenciados na lista de tarefas
+  WD.nome=p.nome;WD.cliente=p.cliente;WD.local=p.local;WD.mob=p.mob;
+  WD.comercial=p.comercial||'';WD.contrato=p.contrato||'';
   wizStep=0;window._editProjId=pid;
   document.getElementById('ov-wiz').classList.add('open');renderWiz();
 }
