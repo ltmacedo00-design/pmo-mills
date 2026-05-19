@@ -40,15 +40,39 @@ db.ref('.info/connected').on('value', function(snap){
 });
 
 // Escutar projetos em tempo real
+// Timestamp do último save local — listener ignora chegadas mais antigas
+var _lastSaveTs = {};  // {projId: timestamp}
+
 db.ref('projetos').on('value', function(snap){
   var val = snap.val() || {};
-  // Atribui ao PROJETOS global (var, não let) — mesma referência que o código usa
-  PROJETOS = Object.keys(val).map(function(k){
+  var incoming = Object.keys(val).map(function(k){
     try {
       var p = val[k];
       return typeof p === 'string' ? JSON.parse(p) : p;
     } catch(e){ return null; }
   }).filter(Boolean);
+
+  // Merge seletivo: protege projetos com edição local pendente
+  var now = Date.now();
+  incoming.forEach(function(inProj){
+    // Nunca sobrescreve o projeto aberto no momento (usuário pode estar editando)
+    var isOpen = (inProj.id === currentProjId);
+    // Tem timer de save pendente
+    var hasTimer = !!_saveTimers[inProj.id];
+    // Foi salvo localmente nos últimos 5 segundos
+    var recentSave = _lastSaveTs[inProj.id] && (now - _lastSaveTs[inProj.id]) < 5000;
+    if(isOpen || hasTimer || recentSave){
+      return; // manter versão local
+    }
+    var idx = PROJETOS.findIndex(function(p){ return p.id === inProj.id; });
+    if(idx >= 0){ PROJETOS[idx] = inProj; } else { PROJETOS.push(inProj); }
+  });
+  // Remover projetos deletados remotamente (preserva os com save recente)
+  PROJETOS = PROJETOS.filter(function(p){
+    var recentSave = _lastSaveTs[p.id] && (now - _lastSaveTs[p.id]) < 5000;
+    var isOpen = (p.id === currentProjId);
+    return isOpen || recentSave || incoming.some(function(i){ return i.id === p.id; });
+  });
 
   window.__fbLoaded = true;
   if(window.__appReady){
@@ -71,8 +95,14 @@ db.ref('catalogo').on('value', function(snap){
 // Salvar projeto
 function dbSalvarProjeto(p){
   if(!p) return;
+  // Registra timestamp do save para o listener não sobrescrever por 3s
+  _lastSaveTs[p.id] = Date.now();
   db.ref('projetos/' + p.id).set(JSON.stringify(p))
-    .then(function(){ mostrarSalvo(); })
+    .then(function(){
+      mostrarSalvo();
+      // Após confirmação do save, mantém proteção por mais 1s
+      _lastSaveTs[p.id] = Date.now();
+    })
     .catch(function(e){ console.error('Erro salvar:', e.message); });
 }
 
@@ -84,10 +114,11 @@ function dbExcluirProjeto(id){
 
 // Salvar catálogos
 function dbSalvarCatalogo(){
+  // Usa as variáveis globais diretamente (var, não window.)
   db.ref('catalogo').set({
-    frota:   window.FROTA_CATALOG || [],
-    cargos:  window.CARGOS_LIST   || [],
-    filiais: window.FILIAIS_LIST  || []
+    frota:   FROTA_CATALOG.length ? FROTA_CATALOG : (window.FROTA_CATALOG||[]),
+    cargos:  CARGOS_LIST.length   ? CARGOS_LIST   : (window.CARGOS_LIST||[]),
+    filiais: FILIAIS_LIST.length  ? FILIAIS_LIST  : (window.FILIAIS_LIST||[])
   }).then(function(){ mostrarSalvo(); })
     .catch(function(e){ console.error('Erro catálogo:', e.message); });
 }
@@ -779,10 +810,10 @@ const PROJ_COLORS=['#e8620a','#1a6fa8','#2d8a5e','#5340a8','#b05a10','#1a7a72','
 
 // ── STATE ──────────────────────────────────
 // ── CATÁLOGO IMPORTADO ─────────────────────────────────
-let FROTA_CATALOG=[]; // [{numAtivo, tipo, modelo}]
-let CARGOS_LIST=[];   // [string]
-let FILIAIS_LIST=[];  // [string]
-let importTab=0;      // 0=frota 1=cargos 2=filiais
+var FROTA_CATALOG=[]; // [{numAtivo, tipo, modelo}]
+var CARGOS_LIST=[];   // [string]
+var FILIAIS_LIST=[];  // [string]
+var importTab=0;      // 0=frota 1=cargos 2=filiais
 
 var uid=1; const nid=()=>'n'+(uid++);
 var expState={};
@@ -810,7 +841,7 @@ const ALL_VIEW_IDS=['view-home','view-kanban','view-comercial','view-admin','vie
 const NTAB_VIEWS=['view-home','view-kanban','view-comercial','view-admin'];
 function hideAllViews(){ALL_VIEW_IDS.forEach(v=>{const el=document.getElementById(v);if(el)el.classList.remove('active');});}
 const ADMIN_PASS='08523691';
-let adminUnlocked=false;
+var adminUnlocked=false;
 function tryAdminTab(){
   if(adminUnlocked){setNtab(3);return;}
   const pw=prompt('🔒 Painel Administrador — senha:');
@@ -819,6 +850,13 @@ function tryAdminTab(){
 }
 function lockAdmin(){adminUnlocked=false;goHome();}
 function setNtab(i){
+  // Flush: salvar projeto atual antes de trocar de aba
+  var _ntPid = currentProjId;
+  if(_ntPid && _saveTimers[_ntPid]){ clearTimeout(_saveTimers[_ntPid]); delete _saveTimers[_ntPid]; }
+  if(_ntPid){
+    var _curProj = PROJETOS.find(function(p){ return p.id === _ntPid; });
+    if(_curProj) dbSalvarProjeto(_curProj);
+  }
   currentNtab=i;
   if(i!==0)currentProjId=null;
   document.querySelectorAll('.ntab').forEach((t,j)=>t.classList.toggle('active',j===i));
@@ -848,7 +886,7 @@ function mkModelo(tipo,modelo,qtd,mobPrev,pers,vlrUnit,cond,capex){
 
 // ── WIZARD ─────────────────────────────────
 const WIZ_STEPS=['Identificação','Frota','Mão de obra','Apoio','Documentação','Revisão'];
-let wizStep=0;let WD={};
+var wizStep=0;var WD={};
 function wizAddCargo(sel){
   var v=sel.value;
   if(v){if(!WD.cargosLista)WD.cargosLista=[];if(!WD.cargosLista.includes(v))WD.cargosLista.push(v);renderWiz();}
@@ -875,7 +913,85 @@ function wizCreate(){
       p.nome=WD.nome||p.nome;p.cliente=WD.cliente||p.cliente;p.local=WD.local||p.local;
       p.mob=WD.mob||p.mob;p.comercial=WD.comercial||p.comercial;
       const fm=p.data.find(m=>m.area==='frota');
-      if(fm){fm.modelos=WD.equips.filter(e=>e.tipo&&e.modelo&&e.qtd>0).map(e=>{const pers=e.pers?e.persList:[];return mkModelo(e.tipo,e.modelo,parseInt(e.qtd)||1,e.mobPrev||p.mob,pers,parseFloat(e.vlrUnit)||0,e.cond||'nova',parseFloat(e.capex)||0);});}
+      if(fm){
+        // Merge por ÍNDICE: WD.equips[i] corresponde a fm.modelos[i]
+        // Isso garante que nenhum equipamento seja perdido ou reordenado
+        var novaListaModelos = [];
+        WD.equips.forEach(function(e, i){
+          var qtdNova = parseInt(e.qtd)||1;
+          var mobPrev = e.mobPrev||p.mob;
+          // Modelo existente na mesma posição (índice) — preserva ativos
+          var moExist = fm.modelos[i];
+          if(moExist){
+            // Atualiza SOMENTE os campos que o usuário pode ter alterado no wizard
+            // NÃO recria ativos — preserva status/datas/filial preenchidos
+            if(e.tipo)  moExist.tipo   = e.tipo;
+            if(e.modelo)moExist.modelo = e.modelo;
+            if(e.tipo && e.modelo) moExist.label = e.tipo+' — '+e.modelo;
+            moExist.vlrUnit = parseFloat(e.vlrUnit)||moExist.vlrUnit||0;
+            moExist.capex   = parseFloat(e.capex)||moExist.capex||0;
+            moExist.mobPrev = e.mobPrev||moExist.mobPrev||p.mob;
+            // Condição: só atualiza se o usuário explicitamente mudou (diferente do original)
+            if(e.cond) moExist.cond = e.cond;
+            moExist.qtd = qtdNova;
+            // Ajusta quantidade de ativos sem destruir os existentes
+            var sg = moExist.subgrupos && moExist.subgrupos[0];
+            if(sg){
+              while(sg.ativos.length < qtdNova){
+                sg.ativos.push(mkAtivo(sg.ativos.length+1, mobPrev, [], moExist.cond||'nova'));
+              }
+              if(sg.ativos.length > qtdNova){
+                sg.ativos = sg.ativos.slice(0, qtdNova);
+              }
+            }
+            novaListaModelos.push(moExist);
+          } else {
+            // Equipamento novo adicionado no wizard: cria do zero
+            var pers = e.pers ? e.persList : [];
+            novaListaModelos.push(mkModelo(e.tipo||'',e.modelo||'',qtdNova,mobPrev,pers,parseFloat(e.vlrUnit)||0,e.cond||'nova',parseFloat(e.capex)||0));
+          }
+        });
+        fm.modelos = novaListaModelos;
+      }
+      // Atualizar seções RH, apoio e docs se o usuário interagiu com essas etapas
+      // (temContrat !== null significa que o usuário escolheu algo na etapa 2)
+      if(WD.temContrat !== null){
+        const rh=p.data.find(m=>m.area==='rh');
+        if(rh){
+          rh.children=[];
+          const base=p.mob||today();
+          if(WD.temContrat===true){
+            ['Abertura de requisição de RH','Processo seletivo','Integração e treinamento','Solicitação de ferramental'].forEach(function(l,i){rh.children.push(mkNode(l,{dtPrev:addDays(base,-35+i*8)}));});
+            (WD.cargosLista||[]).forEach(function(cargo){rh.children.push(mkNode('Contratar: '+cargo,{dtPrev:WD.prazoRH||addDays(base,-10)}));});
+          } else {
+            rh.children.push(mkNode('Designação de mecânico',{dtPrev:addDays(base,-30),mecanico:WD.mecanicos,responsavel:WD.lider}));
+            rh.children.push(mkNode('Comunicação à equipe',{dtPrev:addDays(base,-25),mecanico:WD.mecanicos,responsavel:WD.lider}));
+          }
+          rh.children.push(mkNode('Mobilização do mecânico',{dtPrev:addDays(base,-5),mecanico:WD.mecanicos,responsavel:WD.lider}));
+        }
+      }
+      // Apoio: só atualiza se o usuário escolheu algo (veiculo !== null)
+      if(WD.veiculo !== null || WD.container !== null){
+        const apoio=p.data.find(m=>m.area==='apoio');
+        if(apoio){
+          const base=p.mob||today();
+          // Preservar filhos existentes e adicionar/remover conforme escolha
+          apoio.children=apoio.children||[];
+          // Remover veículo e container antigos
+          apoio.children=apoio.children.filter(function(n){return !n.label||(!n.label.includes('veículo')&&!n.label.includes('Container'));});
+          if(WD.veiculo===true)apoio.children.unshift(mkNode('Locação veículo leve — '+(WD.veiculoTipo||'Pickup'),{dtPrev:addDays(base,-10)}));
+          if(WD.container===true)apoio.children.unshift(mkNode('Container de peças',{dtPrev:addDays(base,-12)}));
+        }
+      }
+      // Docs: só atualiza se há documentos preenchidos
+      const docsFilled=WD.docs.filter(function(d){return d.nome;});
+      if(docsFilled.length){
+        const docsM=p.data.find(m=>m.area==='docs');
+        if(docsM){
+          const base=p.mob||today();
+          docsM.children=docsFilled.map(function(d){return mkNode(d.nome,{dtPrev:d.prazo||addDays(base,-7)});});
+        }
+      }
       projParaSalvar = p; // referência direta, sem find posterior
     }
     window._editProjId=null;
@@ -1040,10 +1156,15 @@ function findGlobal(aId){for(const p of PROJETOS){const n=findInProj(p,aId);if(n
 function findInProj(p,id){function w(n){if(n.id===id)return n;const ll=[n.children,n.modelos,n.subgrupos,n.ativos,n.personalizacoes];for(const l of ll){if(l)for(const c of l){const r=w(c);if(r)return r;}}return null;}for(const m of p.data){const r=w(m);if(r)return r;}return null;}
 function findG(id){const p=getProj();if(!p)return null;return findInProj(p,id);}
 window.__fg=findG;
-var _saveTimer=null;
+// _saveTimer por projeto: {projId: timerId}
+// Assim onChange do Ativo 2 não cancela o save do Ativo 1
+var _saveTimers = {};
+
 function onChange(id,field,val){
-  const n=findG(id);if(!n)return;n[field]=val;
-  // propagate pricing sum to parent ativo
+  const n=findG(id);if(!n)return;
+  // Atualiza o valor no objeto em memória IMEDIATAMENTE
+  n[field]=val;
+  // Propagate pricing sum para o ativo pai
   if(n._pers&&(field==='prcOrc'||field==='prcExec')){
     const p=getProj();if(p){
       allAtivos(p.data).forEach(function(a){
@@ -1055,14 +1176,26 @@ function onChange(id,field,val){
       });
     }
   }
-  renderKPIs();renderHome();renderSidebar();
-  // debounce save no Firebase
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(function(){
-    var proj = getProj();
+  // Atualiza KPIs só quando necessário (não reconstrói DOM)
+  if(field==='status'||field==='dtExec') renderKPIs();
+
+  // Save com debounce POR PROJETO — não cancela saves de outros campos
+  var _pid = currentProjId;
+  if(!_pid) return;
+  // Cancela apenas o timer anterior DO MESMO PROJETO
+  if(_saveTimers[_pid]) clearTimeout(_saveTimers[_pid]);
+  _saveTimers[_pid] = setTimeout(function(){
+    delete _saveTimers[_pid];
+    var proj = PROJETOS.find(function(p){ return p.id === _pid; });
     if(proj) dbSalvarProjeto(proj);
-  }, 1500);
+  }, 800);
 }
+
+// Compatibilidade: _saveTimer aponta para o timer do projeto atual
+Object.defineProperty(window,'_saveTimer',{
+  get: function(){ return _saveTimers[currentProjId]||null; },
+  set: function(v){ if(currentProjId){ if(v===null){ delete _saveTimers[currentProjId]; } else { _saveTimers[currentProjId]=v; } } }
+});
 function isConc(p){const a=allAtivos(p.data);return a.length>0&&a.every(x=>x.status==='sf-ent');}
 function fatMes(p){const fm=p.data.find(m=>m.area==='frota');if(!fm)return 0;return fm.modelos.reduce((s,mo)=>s+(mo.vlrUnit||0)*mo.qtd,0);}
 function pendRes(p){const fm=p.data.find(m=>m.area==='frota');if(!fm||!fm.modelos)return '—';const r=[];fm.modelos.forEach(mo=>{let pend=0,ds=[];mo.subgrupos.forEach(sg=>sg.ativos.forEach(a=>{if(a.status!=='sf-ent'){pend++;const d=a.dtReprog||a.dtProg;if(d)ds.push(d);}}));if(pend>0){const d=ds.sort()[0];r.push(`${(mo.label.split('—')[1]||mo.label).trim()}: ${pend}un.${d?' ('+fmtD(d)+')':''}`);}});return r.length?r.join(' · '):'Tudo entregue';}
@@ -1249,18 +1382,39 @@ function onDrop(ev,col){
   if(!dragSrc)return;
   const newStatus=col.dataset.status;
   const res=findGlobal(dragSrc.aId);
-  if(res){res.node.status=newStatus;renderKanban();renderHome();renderSidebar();dbSalvarProjeto(res.proj);}
+  if(res){
+    res.node.status=newStatus;
+    renderKanban();renderHome();renderSidebar();
+    dbSalvarProjeto(res.proj);
+    // Se o projeto arrastado é o que está aberto, atualiza a lista também
+    if(currentProjId && res.proj && res.proj.id===currentProjId){ renderKPIs();renderLista(); }
+  }
   dragSrc=null;
 }
 
 // ── PROJ NAV ───────────────────────────────
 function goHome(){
+  // Flush: cancelar todos os timers pendentes e salvar imediatamente
+  var _leavingId = currentProjId;
+  // Cancela timer do projeto atual se houver
+  if(_saveTimers[_leavingId]){ clearTimeout(_saveTimers[_leavingId]); delete _saveTimers[_leavingId]; }
+  if(_leavingId){
+    var _leavingProj = PROJETOS.find(function(p){ return p.id === _leavingId; });
+    if(_leavingProj) dbSalvarProjeto(_leavingProj);
+  }
   currentProjId=null;
   hideAllViews();
   document.getElementById('view-home').classList.add('active');
   renderHome();renderSidebar();
 }
 function openProj(pid){
+  // Flush do projeto anterior
+  var _prevId = currentProjId;
+  if(_prevId && _prevId !== pid){
+    if(_saveTimers[_prevId]){ clearTimeout(_saveTimers[_prevId]); delete _saveTimers[_prevId]; }
+    var _prevProj = PROJETOS.find(function(p){ return p.id === _prevId; });
+    if(_prevProj) dbSalvarProjeto(_prevProj);
+  }
   currentProjId=pid;const p=getProj();
   if(!p)return;
   // make sure navtab shows Projetos
@@ -1316,8 +1470,8 @@ const COL_F=[{k:'dtPrev',label:'Dt. Prev. Família',w:118},{k:'dtProg',label:'Pr
 const COL_RH=[{k:'dtPrev',label:'Dt. Prev. Família',w:118},{k:'dtProg',label:'Programada',w:108},{k:'dtReprog',label:'Reprogramada',w:108},{k:'dtExec',label:'Executada',w:108},{k:'mecanico',label:'Mecânico',w:150},{k:'responsavel',label:'Resp. regional',w:145},{k:'obs',label:'Observação',w:190}];
 const COL_G=[{k:'dtPrev',label:'Dt. Prev. Família',w:118},{k:'dtProg',label:'Programada',w:108},{k:'dtReprog',label:'Reprogramada',w:108},{k:'dtExec',label:'Executada',w:108},{k:'prcOrc',label:'Orçado (R$)',w:108},{k:'prcExec',label:'Executado (R$)',w:108},{k:'delta',label:'Δ',w:50},{k:'obs',label:'Observação',w:190}];
 const colsFor=area=>area==='rh'?COL_RH:area==='frota'?COL_F:COL_G;
-function selSt(id,val,list){return `<select class="st-sel" onchange="onChange('${id}','status',this.value);renderKPIs();">${list.map(s=>`<option value="${s.val}"${s.val===val?' selected':''}>${s.label}</option>`).join('')}</select>`;}
-const iD=(id,f,v,acc)=>`<input type="date" value="${v||''}" style="width:115px;${acc?'border-color:var(--accent);font-weight:500;':''}" onchange="onChange('${id}','${f}',this.value);" oninput="onChange('${id}','${f}',this.value);">`;
+function selSt(id,val,list){return `<select class="st-sel" onchange="onChange('${id}','status',this.value);">${list.map(s=>`<option value="${s.val}"${s.val===val?' selected':''}>${s.label}</option>`).join('')}</select>`;}
+const iD=(id,f,v,acc)=>`<input type="date" value="${v||''}" style="width:115px;${acc?'border-color:var(--accent);font-weight:500;':''}" onchange="onChange('${id}','${f}',this.value);">`;
 const iT=(id,f,v,ph)=>`<input type="text" value="${v||''}" placeholder="${ph||''}" style="min-width:80px;" onchange="onChange('${id}','${f}',this.value);">`;
 const iN=(id,f,v)=>`<input type="number" min="0" value="${v||''}" placeholder="0" style="width:96px;" onchange="onChange('${id}','${f}',this.value);document.getElementById('dlt-${id}').innerHTML=calcD(window.__fg('${id}').prcOrc,window.__fg('${id}').prcExec);">`;
 function selFilial(id,val){
@@ -1353,12 +1507,14 @@ function addSubN(pid){
   expState[pid]=true;
   expState[newNode.id]=true;
   renderLista();
+  const _sproj=getProj();if(_sproj)dbSalvarProjeto(_sproj);
 }
 function addMacroN(){
   const l=prompt('Nova tarefa macro:');if(!l)return;
   const p=getProj();if(!p)return;
   const n={id:nid(),_macro:true,area:'outro',label:l,icon:'◆',children:[]};
   expState[n.id]=true;p.data.push(n);renderLista();
+  dbSalvarProjeto(p);
 }
 function addAtivoSg(sgId,mob,pj){const sg=findG(sgId);if(!sg)return;sg.ativos.push(mkAtivo(sg.ativos.length+1,mob,JSON.parse(pj),sg.cond));expState[sgId]=true;renderLista();const _ap=getProj();if(_ap)dbSalvarProjeto(_ap);}
 function addPersA(aId){const l=prompt('Personalização:');if(!l)return;const a=findG(aId);if(!a)return;const pn={id:nid(),_pers:true,label:l,status:'sp-req',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:''};expState[pn.id]=true;a.personalizacoes.push(pn);expState[aId]=true;renderLista();const _pp=getProj();if(_pp)dbSalvarProjeto(_pp);}
@@ -1641,7 +1797,7 @@ function renderKanProjFrota(p){
   }
   document.getElementById('kanProjContainer').innerHTML=html;
 }
-let dragSrcPers=null;
+var dragSrcPers=null;
 function onDragStartPers(ev){dragSrcPers={prid:ev.currentTarget.dataset.prid,pid:ev.currentTarget.dataset.pid};ev.currentTarget.classList.add('dragging');ev.dataTransfer.effectAllowed='move';}
 function onDragOverProj(ev){ev.preventDefault();ev.currentTarget.classList.add('drag-over');}
 function onDropProj(ev,col){
@@ -1659,7 +1815,7 @@ function renderKanProjGeral(p){
   html+='</div>';document.getElementById('kanProjContainer').innerHTML=html;
 }
 // Drag & drop for kanban proj
-let kpDragSrc=null;
+var kpDragSrc=null;
 function onKPDragStart(ev){kpDragSrc=ev.currentTarget.dataset.aid;ev.currentTarget.classList.add('dragging');ev.dataTransfer.effectAllowed='move';}
 function onKPDragEnd(ev){ev.currentTarget.classList.remove('dragging');document.querySelectorAll('.kan-col-wrap').forEach(c=>c.classList.remove('drag-over'));}
 function onKPDragOver(ev){ev.preventDefault();ev.dataTransfer.dropEffect='move';ev.currentTarget.classList.add('drag-over');}
@@ -1896,10 +2052,39 @@ function openEditWiz(pid,ev){
   if(ev)ev.stopPropagation();
   const p=PROJETOS.find(x=>x.id===pid);if(!p)return;
   wdReset();
-  WD.nome=p.nome;WD.cliente=p.cliente;WD.local=p.local;WD.mob=p.mob;WD.comercial=p.comercial||'';
+  // Step 0: identificação
+  WD.nome=p.nome;WD.cliente=p.cliente;WD.local=p.local;WD.mob=p.mob;WD.comercial=p.comercial||'';WD.contrato=p.contrato||'';
+  // Step 1: frota
   const fm=p.data.find(m=>m.area==='frota');
   if(fm&&fm.modelos.length){
     WD.equips=fm.modelos.map(mo=>({tipo:mo.tipo||'',modelo:mo.modelo||'',cond:mo.cond||'nova',qtd:mo.qtd||1,vlrUnit:mo.vlrUnit||0,capex:mo.capex||0,mobPrev:mo.mobPrev||'',pers:mo.personalizacoes&&mo.personalizacoes.length>0,persList:[...mo.personalizacoes||[]]}));
+  }
+  // Step 2: mão de obra — ler do projeto existente
+  const rh=p.data.find(m=>m.area==='rh');
+  if(rh){
+    // Detectar se tinha contratação: se primeiro filho é "Abertura de requisição de RH"
+    const primeiroFilho=rh.children&&rh.children[0];
+    if(primeiroFilho&&primeiroFilho.label&&primeiroFilho.label.includes('requisição')){
+      WD.temContrat=true;
+    } else if(primeiroFilho){
+      WD.temContrat=false;
+      // Ler mecânico e responsável do primeiro nó
+      WD.mecanicos=primeiroFilho.mecanico||'';
+      WD.lider=primeiroFilho.responsavel||'';
+    }
+  }
+  // Step 3: apoio e logística — ler do projeto existente
+  const apoio=p.data.find(m=>m.area==='apoio');
+  if(apoio&&apoio.children){
+    WD.veiculo=apoio.children.some(function(n){return n.label&&n.label.includes('veículo');});
+    WD.container=apoio.children.some(function(n){return n.label&&n.label.includes('Container');});
+    const outros=apoio.children.find(function(n){return n.label&&!n.label.includes('veículo')&&!n.label.includes('Container');});
+    if(outros)WD.outros=outros.label||'';
+  }
+  // Step 4: documentos — ler do projeto existente
+  const docsM=p.data.find(m=>m.area==='docs');
+  if(docsM&&docsM.children&&docsM.children.length){
+    WD.docs=docsM.children.map(function(d){return{nome:d.label||'',prazo:d.dtPrev||''};});
   }
   wizStep=0;window._editProjId=pid;
   document.getElementById('ov-wiz').classList.add('open');renderWiz();
@@ -1940,7 +2125,6 @@ function parseFrotaPaste(){
         ${catalog.length>8?`<span style="font-size:10px;color:var(--text-muted);"> ...e mais ${catalog.length-8}</span>`:''}
       </div>
     </div>`;
-  if(typeof fbSaveCatalog==='function') fbSaveCatalog();
   dbSalvarCatalogo();
 }
 function handleFrotaFile(file){
@@ -1977,7 +2161,6 @@ function parseCargos(){
       ✓ <strong>${CARGOS_LIST.length} cargos</strong> importados com sucesso.<br>
       <div style="margin-top:6px;">${CARGOS_LIST.map(c=>`<span style="font-size:10px;background:var(--white);border:1px solid var(--border-soft);border-radius:4px;padding:1px 6px;margin:2px;display:inline-block;">${c}</span>`).join('')}</div>
     </div>`;
-  if(typeof fbSaveCatalog==='function') fbSaveCatalog();
   dbSalvarCatalogo();
 }
 
