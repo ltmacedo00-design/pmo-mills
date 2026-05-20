@@ -629,7 +629,7 @@ table.pmo tr:last-child td{border-bottom:none;}
         </div>
         <div class="gantt-wrap" id="ganttWrap"></div>
       </div>
-      <div id="tab-kanproj" class="screen" style="padding:14px 18px;overflow-y:auto;flex:1;" id="tab-kanproj">
+      <div id="tab-kanproj" class="screen" style="padding:14px 18px;overflow-y:auto;flex:1;">
         <div style="display:flex;gap:6px;margin-bottom:12px;">
           <button class="fb active" id="kb-f" onclick="setKV('frota',this)">Frota</button>
           <button class="fb" id="kb-g" onclick="setKV('geral',this)">Demais tarefas</button>
@@ -1250,7 +1250,9 @@ function renderInsights(){
   document.getElementById('home-insights').innerHTML=tips.slice(0,3).map(t=>`<div class="tip-card"><div class="tip-icon">${t.icon}</div><div class="tip-title">${t.title}</div><div class="tip-body">${t.body}</div><div class="tip-tag" style="background:${t.tbg};color:${t.tc};">${t.tag}</div></div>`).join('');
 }
 function renderHome(){
-  renderHomeKPIs();renderInsights();renderRevenueChart();
+  try{renderHomeKPIs();}catch(e){console.error('renderHomeKPIs:',e);}
+  try{renderInsights();}catch(e){console.error('renderInsights:',e);}
+  try{renderRevenueChart();}catch(e){console.error('renderRevenueChart:',e);}
   const and=PROJETOS.filter(p=>!isConc(p));const conc=PROJETOS.filter(p=>isConc(p));
   let rA='';
   if(!and.length)rA=`<tr><td colspan="10" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum projeto em andamento. Clique em "+ Novo projeto" para começar.</td></tr>`;
@@ -1394,19 +1396,24 @@ function openProj(pid){
   document.getElementById('ph-comercial').textContent=p.comercial?'• 🤝 '+p.comercial:'';
   hideAllViews();
   document.getElementById('view-proj').classList.add('active');
-  expState={};allNodes(p.data).forEach(n=>{expState[n.id]=true;});
+  expState={};
+  try{allNodes(p.data).forEach(n=>{expState[n.id]=true;});}catch(e){console.error('allNodes error:',e);}
   activeFilter='todos';
   document.querySelectorAll('.tb').forEach((b,i)=>b.classList.toggle('active',i===0));
   document.querySelectorAll('#tab-actions .fb').forEach((b,i)=>{b.classList.toggle('active',i===0);});
   ['lista','gantt','kanproj'].forEach(t=>{const el=document.getElementById('tab-'+t);if(el)el.classList.toggle('active',t==='lista');});
-  renderKPIs();renderLista();renderSidebar();
+  try{renderKPIs();}catch(e){console.error('renderKPIs error:',e);}
+  try{renderLista();}catch(e){console.error('renderLista error:',e);}
+  try{renderSidebar();}catch(e){console.error('renderSidebar error:',e);}
 }
 function switchTab(tab,btn){
   document.querySelectorAll('.tb').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
   ['lista','gantt','kanproj'].forEach(t=>{const el=document.getElementById('tab-'+t);if(el)el.classList.toggle('active',t===tab);});
-  if(tab==='lista'){renderKPIs();renderLista();}
-  else if(tab==='gantt')renderGantt(ganttExpanded);
-  else if(tab==='kanproj')renderKanProj();
+  try{
+    if(tab==='lista'){renderKPIs();renderLista();}
+    else if(tab==='gantt')renderGantt(ganttExpanded);
+    else if(tab==='kanproj')renderKanProj();
+  }catch(e){console.error('switchTab render error:',e);}
 }
 
 // ── KPIs PROJ ─────────────────────────────
