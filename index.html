@@ -546,9 +546,9 @@ table.pmo tr:last-child td{border-bottom:none;}
   <div class="logo-sub"><strong>PMO</strong> Implantação</div>
   <div class="topbar-date" id="topbar-date"></div>
   <button class="btn-accent" style="margin-left:12px;" onclick="openWiz()">+ Novo projeto</button>
-  <div id="fb-status" style="display:none;">
-    <span id="fb-dot"></span>
-    <span id="fb-txt">Conectando...</span>
+  <div style="display:none;">
+    <span id="fb-dot-hidden"></span>
+    <span id="fb-txt-hidden"></span>
   </div>
 </div>
 <div class="navtabs" id="navtabs" style="display:none;">
@@ -791,7 +791,8 @@ table.pmo tr:last-child td{border-bottom:none;}
       <div style="font-size:16px;font-weight:600;color:var(--text-dark);">Visão do Comercial</div>
       <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
         <span style="font-size:11px;color:var(--text-dim);">Comercial:</span>
-        <div class="ms-wrap" id="ms-vc-wrap"><div class="ms-btn" onclick="msToggle('ms-vc')" style="min-width:180px;height:30px;"><span class="ms-btn-lbl" id="ms-vc-lbl">Todos</span><span class="ms-btn-arrow">▾</span></div><div class="ms-dropdown" id="ms-vc"><div class="ms-opts" id="ms-vc-opts"></div><div class="ms-footer"><button onclick="msClear('ms-vc');renderComercial()">Limpar</button><span class="ms-count" id="ms-vc-cnt"></span></div></div></div>
+        <select id="vc-proj-filter" onchange="renderComercial()" style="font-size:11.5px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--white);color:var(--text-dark);height:30px;min-width:160px;"><option value="">Todos os projetos</option></select>
+<div class="ms-wrap" id="ms-vc-wrap"><div class="ms-btn" onclick="msToggle('ms-vc')" style="min-width:180px;height:30px;"><span class="ms-btn-lbl" id="ms-vc-lbl">Todos</span><span class="ms-btn-arrow">▾</span></div><div class="ms-dropdown" id="ms-vc"><div class="ms-opts" id="ms-vc-opts"></div><div class="ms-footer"><button onclick="msClear('ms-vc');renderComercial()">Limpar</button><span class="ms-count" id="ms-vc-cnt"></span></div></div></div>
       </div>
     </div>
 
@@ -1287,8 +1288,8 @@ function onChange(id,field,val){
       allAtivos(p.data).forEach(function(a){
         if(a.personalizacoes&&a.personalizacoes.includes(n)){
           const r=calcAtivoPricing(a);
-          a.prcOrc=r.orc>0?String(r.orc):'';
-          a.prcExec=r.exec>0?String(r.exec):'';
+          a.prcOrc=r.orc>=0?String(r.orc):'';
+          a.prcExec=r.exec>=0?String(r.exec):'';
         }
       });
     }
@@ -1550,6 +1551,9 @@ function normalizarProjeto(proj){
       (mo.subgrupos||[]).forEach(function(sg){
         (sg.ativos||[]).forEach(function(a){
           if(!a.personalizacoes) a.personalizacoes=[];
+            if(a.filial===undefined) a.filial='';
+            if(a.prcOrc===undefined) a.prcOrc='';
+            if(a.prcExec===undefined) a.prcExec='';
         });
       });
     });
@@ -2048,11 +2052,26 @@ function populateComercialFilter(){
   const coms=new Set();
   PROJETOS.forEach(p=>{if(p.comercial)coms.add(p.comercial);});
   msBuildOpts('ms-vc',[...coms],'Todos','renderComercial');
+  // Filtro por projeto
+  const sel=document.getElementById('vc-proj-filter');
+  if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">Todos os projetos</option>'
+    +PROJETOS.map(p=>`<option value="${p.id}"${p.id===cur?' selected':''}>${p.nome}</option>`).join('');
+}
+
+function vcProjFilter(){
+  const sel=document.getElementById('vc-proj-filter');
+  return sel?sel.value:'';
 }
 
 function vcProjs(){
-  const vals=msVals('ms-vc');
-  return vals.length?PROJETOS.filter(p=>vals.includes(p.comercial)):PROJETOS;
+  const sel=msGet('ms-vc');
+  const projFil=typeof vcProjFilter==='function'?vcProjFilter():'';
+  let ps=PROJETOS;
+  if(sel.size)ps=ps.filter(p=>p.comercial&&sel.has(p.comercial));
+  if(projFil)ps=ps.filter(p=>p.id===projFil);
+  return ps;
 }
 
 function renderVcChart(containerId, lblId, map, color){
@@ -2186,6 +2205,7 @@ function renderComercial(){
     allNodes(p.data).forEach(n=>{
       if(n._ativo||n._pers||n._macro||n._modelo||n._sg)return;
       if(n.status==='sg-conc')return;
+      if(!n.label||n.label==='undefined'||n.label.trim()==='')return;
       const late=n.dtPrev&&n.dtPrev<td;
       pendAts.push({n,p,late});
     });
@@ -2223,13 +2243,29 @@ function renderComercial(){
     const stPersLbl={'sp-req':'Ag. req.','sp-pc':'Ag. compra','sp-ent2':'Ag. entrega','sp-ia':'Ag. inst.'};
     prepHtml+=`<div style="border:1px solid var(--border-soft);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
       <div style="font-size:12px;font-weight:600;margin-bottom:7px;cursor:pointer;color:var(--accent);" onclick="openProj('${p.id}')">${p.nome} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">${pendPrep.length} personaliz. pendentes</span></div>
-      ${pendPrep.slice(0,8).map(({pr,a})=>`
+      <div id="prep-list-${p.id}"
+        data-expanded="0"
+        data-first="${pendPrep.slice(0,8).map(({pr,a})=>`<div style='display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border-soft);'><span style='font-size:9.5px;padding:1px 6px;border-radius:6px;background:${stPersColors[pr.status]||'#eee'};color:${stPersTc[pr.status]||'#666'};white-space:nowrap;'>${stPersLbl[pr.status]||pr.status}</span><span style='font-size:11px;flex:1;'>🔧 ${pr.label}</span><span style='font-size:10px;color:var(--text-dim);'>${a.label}</span></div>`).join('').replace(/"/g,'&quot;')}"
+        data-all="${pendPrep.map(({pr,a})=>`<div style='display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border-soft);'><span style='font-size:9.5px;padding:1px 6px;border-radius:6px;background:${stPersColors[pr.status]||'#eee'};color:${stPersTc[pr.status]||'#666'};white-space:nowrap;'>${stPersLbl[pr.status]||pr.status}</span><span style='font-size:11px;flex:1;'>🔧 ${pr.label}</span><span style='font-size:10px;color:var(--text-dim);'>${a.label}</span></div>`).join('').replace(/"/g,'&quot;')}">
+        ${pendPrep.slice(0,8).map(({pr,a})=>`
         <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border-soft);">
           <span style="font-size:9.5px;padding:1px 6px;border-radius:6px;background:${stPersColors[pr.status]||'#eee'};color:${stPersTc[pr.status]||'#666'};white-space:nowrap;">${stPersLbl[pr.status]||pr.status}</span>
           <span style="font-size:11px;flex:1;">🔧 ${pr.label}</span>
           <span style="font-size:10px;color:var(--text-dim);">${a.label}</span>
         </div>`).join('')}
-      ${pendPrep.length>8?`<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">...e mais ${pendPrep.length-8}.</div>`:''}
+      </div>
+      ${pendPrep.length>8?`<div id="prep-more-${p.id}" style="font-size:10px;color:var(--accent);margin-top:6px;cursor:pointer;" onclick="
+        var el=document.getElementById('prep-list-${p.id}');
+        var btn=document.getElementById('prep-more-${p.id}');
+        if(el.dataset.expanded==='1'){
+          el.innerHTML=el.dataset.first;
+          el.dataset.expanded='0';
+          btn.textContent='▼ Ver mais ${pendPrep.length-8} preparações';
+        } else {
+          el.innerHTML=el.dataset.all;
+          el.dataset.expanded='1';
+          btn.textContent='▲ Recolher';
+        }">▼ Ver mais ${pendPrep.length-8} preparações</div>`:''}
     </div>`;
   });
   document.getElementById('vc-prep').innerHTML=prepHtml||'<div style="font-size:11px;color:var(--text-muted);">Nenhuma personalização pendente nos projetos da carteira.</div>';
