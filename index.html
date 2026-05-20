@@ -52,24 +52,7 @@ db.ref('projetos').on('value', function(snap){
     } catch(e){ return null; }
   }).filter(Boolean);
 
-  // Normalizar ativos: garantir que todo ativo tem personalizacoes[]
-  // (ativos salvos antes desse campo existir podem não ter)
-  function normalizarProjeto(proj){
-    if(!proj||!proj.data)return proj;
-    proj.data.forEach(function(macro){
-      if(macro.area!=='frota'||!macro.modelos)return;
-      macro.modelos.forEach(function(mo){
-        (mo.subgrupos||[]).forEach(function(sg){
-          (sg.ativos||[]).forEach(function(a){
-            if(!a.personalizacoes) a.personalizacoes=[];
-          });
-        });
-      });
-    });
-    return proj;
-  }
-
-  // Merge seletivo: protege projetos com edição local pendente
+    // Merge seletivo: protege projetos com edição local pendente
   var now = Date.now();
   incoming.forEach(function(inProj){
     // Nunca sobrescreve o projeto aberto no momento (usuário pode estar editando)
@@ -968,7 +951,17 @@ function wizCreate(){
     window._editProjId=null;
   }
   closeWiz();renderHome();renderSidebar();populateKanFilters();populateComercialFilter();
-  // Salvar no Firebase — usa referência direta capturada acima
+  // Se o projeto editado está aberto, atualiza a view imediatamente
+  if(projParaSalvar && projParaSalvar.id === currentProjId){
+    try{renderKPIs();}catch(e){}
+    try{renderLista();}catch(e){}
+    // Atualiza gantt/kanban se estiver na aba correspondente
+    var tabG=document.getElementById('tab-gantt');
+    var tabK=document.getElementById('tab-kanproj');
+    if(tabG&&tabG.classList.contains('active'))try{renderGantt(ganttExpanded);}catch(e){}
+    if(tabK&&tabK.classList.contains('active'))try{renderKanProj();}catch(e){}
+  }
+  // Salvar no Firebase
   if(projParaSalvar) dbSalvarProjeto(projParaSalvar);
 }
 function buildData(){
@@ -1374,6 +1367,23 @@ function goHome(){
   document.getElementById('view-home').classList.add('active');
   renderHome();renderSidebar();
 }
+// Normaliza projeto: garante personalizacoes[] em todos os ativos
+// (ativos antigos no Firebase podem não ter esse campo)
+function normalizarProjeto(proj){
+  if(!proj||!proj.data)return proj;
+  proj.data.forEach(function(macro){
+    if(macro.area!=='frota'||!macro.modelos)return;
+    macro.modelos.forEach(function(mo){
+      (mo.subgrupos||[]).forEach(function(sg){
+        (sg.ativos||[]).forEach(function(a){
+          if(!a.personalizacoes) a.personalizacoes=[];
+        });
+      });
+    });
+  });
+  return proj;
+}
+
 function openProj(pid){
   // Flush do projeto anterior
   var _prevId = currentProjId;
@@ -1521,6 +1531,31 @@ function inpName(id,val,w){
   const dl=FROTA_CATALOG.length?`<datalist id="${dlId}">${FROTA_CATALOG.map(a=>`<option value="${a.numAtivo}">${a.numAtivo} — ${a.tipo} ${a.modelo}</option>`).join('')}</datalist>`:'';
   return dl+`<input type="text" value="${val}" placeholder="Nº frota" list="${dlId}" style="width:${w}px;font-weight:500;border:1px solid transparent;border-radius:4px;padding:2px 4px;background:transparent;" onchange="onChange('${id}','label',this.value);" onfocus="this.style.borderColor='var(--accent)';this.style.background='var(--white)';" onblur="this.style.borderColor='transparent';this.style.background='transparent';">`;}
 
+function remLinha(id){
+  const p=getProj();if(!p)return;
+  // Remove o nó com esse id de qualquer lugar na árvore do projeto
+  function remDeArray(arr){
+    if(!arr)return false;
+    const idx=arr.findIndex(function(n){return n.id===id;});
+    if(idx>=0){arr.splice(idx,1);return true;}
+    return arr.some(function(n){
+      return remDeArray(n.children)||remDeArray(n.modelos)||
+             remDeArray(n.subgrupos)||remDeArray(n.ativos)||remDeArray(n.personalizacoes);
+    });
+  }
+  remDeArray(p.data);
+  // Recalcular qtd dos modelos após remoção de ativo
+  p.data.forEach(function(macro){
+    if(macro.area!=='frota'||!macro.modelos)return;
+    macro.modelos.forEach(function(mo){
+      if(mo.subgrupos&&mo.subgrupos[0]) mo.qtd=mo.subgrupos[0].ativos.length;
+    });
+  });
+  try{renderKPIs();}catch(e){}
+  try{renderLista();}catch(e){}
+  dbSalvarProjeto(p);
+}
+
 function renderLista(){
   const p=getProj();if(!p)return;
   const vis=activeFilter==='todos'?p.data:p.data.filter(m=>m.area===activeFilter);
@@ -1566,8 +1601,8 @@ function renderLista(){
             const aExec=hP?a.personalizacoes.reduce((s,pr)=>s+(parseFloat(pr.prcExec)||0),0):parseFloat(a.prcExec)||0;
             const orcCell=aOrc>0?`<span style="font-size:10px;color:var(--blue);font-weight:500;">${fmtCur(aOrc)}</span>${hP?'<span style="font-size:9px;color:var(--text-muted);"> Σ</span>':''}`:'—';
             const execCell=aExec>0?`<span style="font-size:10px;color:var(--green);font-weight:500;">${fmtCur(aExec)}</span>`:'—';
-            rows+=`<tr class="r-s2"><td class="scol" style="background:var(--white);"><div style="display:flex;align-items:center;gap:2px;padding-left:26px;">${hP?`<span class="chev ${aOpen?'open':''}" onclick="toggleExp('${a.id}')">▶</span>`:'<span style="width:10px;display:inline-block;"></span>'} ${inpName(a.id,a.label,100)}</div></td><td>${selSt(a.id,a.status,SF_ATIVO)}</td>${showFrota?`<td>${selFilial(a.id,a.filial)}</td>`:''}<td>${iD(a.id,'dtPrev',a.dtPrev,true)}</td>${dCells(a,moCols.slice(1,5),SF_ATIVO)}<td>${orcCell}</td><td>${execCell}</td><td>${(aOrc>0||aExec>0)?calcD(aOrc,aExec):'—'}</td><td>${iT(a.id,'obs',a.obs,'Obs...')}</td><td style="white-space:nowrap;"><button class="add-btn" onclick="addPersA('${a.id}')" title="Add preparação">🔧</button></td></tr>`;
-            if(aOpen&&hP)a.personalizacoes.forEach(pr=>{rows+=`<tr class="r-s3"><td class="scol" style="background:#fafcfd;"><div style="display:flex;align-items:center;gap:4px;padding-left:40px;"><span style="color:var(--accent);font-size:10px;">🔧</span><span style="font-size:11px;color:var(--text-mid);">${pr.label}</span></div></td><td>${selSt(pr.id,pr.status,SF_PERS)}</td>${showFrota?'<td></td>':''}<td>${iD(pr.id,'dtPrev',pr.dtPrev,true)}</td>${dCells(pr,moCols.slice(1),SF_PERS)}<td></td></tr>`;});
+            rows+=`<tr class="r-s2"><td class="scol" style="background:var(--white);"><div style="display:flex;align-items:center;gap:2px;padding-left:26px;">${hP?`<span class="chev ${aOpen?'open':''}" onclick="toggleExp('${a.id}')">▶</span>`:'<span style="width:10px;display:inline-block;"></span>'} ${inpName(a.id,a.label,100)}</div></td><td>${selSt(a.id,a.status,SF_ATIVO)}</td>${showFrota?`<td>${selFilial(a.id,a.filial)}</td>`:''}<td>${iD(a.id,'dtPrev',a.dtPrev,true)}</td>${dCells(a,moCols.slice(1,5),SF_ATIVO)}<td>${orcCell}</td><td>${execCell}</td><td>${(aOrc>0||aExec>0)?calcD(aOrc,aExec):'—'}</td><td>${iT(a.id,'obs',a.obs,'Obs...')}</td><td style="white-space:nowrap;"><button class="add-btn" onclick="addPersA('${a.id}')" title="Add preparação">🔧</button> <button class="add-btn" onclick="remLinha('${a.id}')" title="Remover ativo" style="background:var(--red-bg);color:var(--red);border-color:var(--red);">🗑</button></td></tr>`;
+            if(aOpen&&hP)a.personalizacoes.forEach(pr=>{rows+=`<tr class="r-s3"><td class="scol" style="background:#fafcfd;"><div style="display:flex;align-items:center;gap:4px;padding-left:40px;"><span style="color:var(--accent);font-size:10px;">🔧</span><span style="font-size:11px;color:var(--text-mid);">${pr.label}</span></div></td><td>${selSt(pr.id,pr.status,SF_PERS)}</td>${showFrota?'<td></td>':''}<td>${iD(pr.id,'dtPrev',pr.dtPrev,true)}</td>${dCells(pr,moCols.slice(1),SF_PERS)}<td style="white-space:nowrap;"><button class="add-btn" onclick="remLinha('${pr.id}')" title="Remover preparação" style="background:var(--red-bg);color:var(--red);border-color:var(--red);">🗑</button></td></tr>`;});
           });
           // botão + ativo agora está na linha do modelo
         });
@@ -1576,8 +1611,8 @@ function renderLista(){
       const mCols2=colsFor(macro.area);
       macro.children.forEach(sub=>{
         const sOpen=expState[sub.id];const hC=sub.children&&sub.children.length>0;
-        rows+=`<tr class="r-s1"><td class="scol" style="background:var(--surface2);"><div style="display:flex;align-items:center;gap:3px;padding-left:14px;">${hC?`<span class="chev ${sOpen?'open':''}" onclick="toggleExp('${sub.id}')">▶</span>`:'<span style="width:10px;display:inline-block;"></span>'} ${inpName(sub.id,sub.label,148)}</div></td><td>${selSt(sub.id,sub.status,SG)}</td>${showFrota?'<td></td>':''}<td>${iD(sub.id,'dtPrev',sub.dtPrev,true)}</td>${dCells(sub,mCols2.slice(1),SG)}<td><button class="add-btn" onclick="addSubN('${sub.id}')">+</button></td></tr>`;
-        if(sOpen&&hC)sub.children.forEach(c=>{rows+=`<tr class="r-s2"><td class="scol" style="background:var(--white);"><div style="display:flex;align-items:center;gap:3px;padding-left:28px;"><span style="width:10px;display:inline-block;"></span> ${inpName(c.id,c.label,138)}</div></td><td>${selSt(c.id,c.status,SG)}</td>${showFrota?'<td></td>':''}<td>${iD(c.id,'dtPrev',c.dtPrev,true)}</td>${dCells(c,mCols2.slice(1),SG)}<td></td></tr>`;});
+        rows+=`<tr class="r-s1"><td class="scol" style="background:var(--surface2);"><div style="display:flex;align-items:center;gap:3px;padding-left:14px;">${hC?`<span class="chev ${sOpen?'open':''}" onclick="toggleExp('${sub.id}')">▶</span>`:'<span style="width:10px;display:inline-block;"></span>'} ${inpName(sub.id,sub.label,148)}</div></td><td>${selSt(sub.id,sub.status,SG)}</td>${showFrota?'<td></td>':''}<td>${iD(sub.id,'dtPrev',sub.dtPrev,true)}</td>${dCells(sub,mCols2.slice(1),SG)}<td style="white-space:nowrap;"><button class="add-btn" onclick="addSubN('${sub.id}')">+</button> <button class="add-btn" onclick="remLinha('${sub.id}')" title="Remover linha" style="background:var(--red-bg);color:var(--red);border-color:var(--red);">🗑</button></td></tr>`;
+        if(sOpen&&hC)sub.children.forEach(c=>{rows+=`<tr class="r-s2"><td class="scol" style="background:var(--white);"><div style="display:flex;align-items:center;gap:3px;padding-left:28px;"><span style="width:10px;display:inline-block;"></span> ${inpName(c.id,c.label,138)}</div></td><td>${selSt(c.id,c.status,SG)}</td>${showFrota?'<td></td>':''}<td>${iD(c.id,'dtPrev',c.dtPrev,true)}</td>${dCells(c,mCols2.slice(1),SG)}<td><button class="add-btn" onclick="remLinha('${c.id}')" title="Remover linha" style="background:var(--red-bg);color:var(--red);border-color:var(--red);">🗑</button></td></tr>`;});
       });
     }
   });
