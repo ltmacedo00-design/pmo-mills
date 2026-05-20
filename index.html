@@ -799,20 +799,47 @@ table.pmo tr:last-child td{border-bottom:none;}
     <!-- KPI strip -->
     <div id="vc-kpis" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px;"></div>
 
-    <!-- Gráficos lado a lado -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
-      <div style="background:var(--white);border:1px solid var(--border-soft);border-radius:10px;padding:16px 18px;">
-        <div style="font-size:12px;font-weight:600;color:var(--text-dark);margin-bottom:12px;">📈 Previsão de receita — acréscimo mensal por entrega prevista</div>
-        <div id="vc-chart-prev" style="height:130px;display:flex;flex-direction:column;justify-content:flex-end;"></div>
-        <div id="vc-chart-prev-lbl" style="margin-top:4px;"></div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">Base: valor unit. × data prevista de entrega do ativo</div>
+    <!-- ── SEÇÃO 1: CAPA DE CONTRATO ── -->
+    <div style="background:var(--white);border:1px solid var(--border-soft);border-radius:10px;padding:14px 18px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-dark);margin-bottom:4px;">📄 Capa de Contrato — Valor mensal cheio por mês de início</div>
+      <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:12px;">Valor total da mensalidade do contrato, agrupado pelo mês em que cada ativo inicia faturamento.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📈 Previsto (data programada)</div>
+          <div id="vc-chart-prev" style="height:120px;display:flex;flex-direction:column;justify-content:flex-end;"></div>
+          <div id="vc-chart-prev-lbl" style="margin-top:3px;"></div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">✅ Realizado (data executada)</div>
+          <div id="vc-chart-real" style="height:120px;display:flex;flex-direction:column;justify-content:flex-end;"></div>
+          <div id="vc-chart-real-lbl" style="margin-top:3px;"></div>
+        </div>
       </div>
-      <div style="background:var(--white);border:1px solid var(--border-soft);border-radius:10px;padding:16px 18px;">
-        <div style="font-size:12px;font-weight:600;color:var(--text-dark);margin-bottom:12px;">✅ Receita realizada — incremento mensal por entrega executada</div>
-        <div id="vc-chart-real" style="height:130px;display:flex;flex-direction:column;justify-content:flex-end;"></div>
-        <div id="vc-chart-real-lbl" style="margin-top:4px;"></div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">Base: valor unit. × data executada de entrega do ativo</div>
+    </div>
+
+    <!-- ── SEÇÃO 2: FATURAMENTO PROPORCIONAL ── -->
+    <div style="background:var(--white);border:1px solid var(--border-soft);border-radius:10px;padding:14px 18px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-dark);margin-bottom:4px;">⚖️ Faturamento Proporcional — Valor fracionado pelo dia de início no mês</div>
+      <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:12px;">Calcula o valor que efetivamente entra no mês de mobilização: <strong>Mensalidade × (dias restantes no mês a partir da mob) ÷ dias do mês</strong>.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📈 Previsto (data programada)</div>
+          <div id="vc-chart-prop-prev" style="height:120px;display:flex;flex-direction:column;justify-content:flex-end;"></div>
+          <div id="vc-chart-prop-prev-lbl" style="margin-top:3px;"></div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">✅ Realizado (data executada)</div>
+          <div id="vc-chart-prop-real" style="height:120px;display:flex;flex-direction:column;justify-content:flex-end;"></div>
+          <div id="vc-chart-prop-real-lbl" style="margin-top:3px;"></div>
+        </div>
       </div>
+    </div>
+
+    <!-- ── SEÇÃO 3: LUCRO CESSANTE ── -->
+    <div style="background:var(--white);border:1px solid var(--border-soft);border-radius:10px;padding:14px 18px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-dark);margin-bottom:4px;">🔴 Lucro Cessante — Receita perdida por atraso de mobilização</div>
+      <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:12px;">Diferença entre data programada e executada: <strong>(dias de atraso) × (mensalidade ÷ dias do mês)</strong> = receita que deixou de entrar por atraso de mob.</div>
+      <div id="vc-lucro-cess"></div>
     </div>
 
     <!-- Resumo por operação + pricing -->
@@ -2130,15 +2157,155 @@ function renderComercial(){
   }
 ;
 
-  // ── GRÁFICO PREVISTO ──────────────────────────────────────────
-  const mapPrev={};
-  ps.forEach(p=>{const fm=p.data.find(m=>m.area==='frota');if(!fm)return;fm.modelos.forEach(mo=>{const vlr=mo.vlrUnit||0;if(!vlr)return;mo.subgrupos.forEach(sg=>sg.ativos.forEach(a=>{const dt=a.dtReprog||a.dtProg||a.dtPrev;if(!dt)return;const ym=dt.slice(0,7);mapPrev[ym]=(mapPrev[ym]||0)+vlr;}));});});
-  renderVcChart('vc-chart-prev','vc-chart-prev-lbl',mapPrev,'var(--accent)');
+  // ── HELPERS DE CÁLCULO ───────────────────────────────────────
+  // Dias no mês de uma data 'YYYY-MM-DD'
+  function diasNoMes(dt){const d=new Date(dt+'T00:00:00');return new Date(d.getFullYear(),d.getMonth()+1,0).getDate();}
+  // Último dia do mês de uma data
+  function ultimoDiaMes(dt){const d=new Date(dt+'T00:00:00');return new Date(d.getFullYear(),d.getMonth()+1,0).getDate();}
+  // Dia do mês de uma data (1-31)
+  function diaMes(dt){return new Date(dt+'T00:00:00').getDate();}
+  // Faturamento proporcional: vlrUnit * (diasNoMes - diaInicio + 1) / diasNoMes
+  function fatProporcional(vlrUnit, dt){
+    if(!dt||!vlrUnit)return 0;
+    const total=diasNoMes(dt);
+    const inicio=diaMes(dt);
+    const diasFaturados=total-inicio+1;
+    return vlrUnit*diasFaturados/total;
+  }
+  // Diferença em dias entre duas datas
+  function diffDiasStr(d1,d2){
+    if(!d1||!d2)return 0;
+    return Math.round((new Date(d2+'T00:00:00')-new Date(d1+'T00:00:00'))/86400000);
+  }
 
-  // ── GRÁFICO REALIZADO ─────────────────────────────────────────
-  const mapReal={};
-  ps.forEach(p=>{const fm=p.data.find(m=>m.area==='frota');if(!fm)return;fm.modelos.forEach(mo=>{const vlr=mo.vlrUnit||0;if(!vlr)return;mo.subgrupos.forEach(sg=>sg.ativos.forEach(a=>{if(a.status!=='sf-ent'||!a.dtExec)return;const ym=a.dtExec.slice(0,7);mapReal[ym]=(mapReal[ym]||0)+vlr;}));});});
-  renderVcChart('vc-chart-real','vc-chart-real-lbl',mapReal,'var(--green)');
+  // ── CAPA DE CONTRATO (mensal cheio) ──────────────────────────
+  const mapCapaPrev={}, mapCapaReal={};
+  // Proporcional previsto e realizado
+  const mapPropPrev={}, mapPropReal={};
+  // Lucro cessante por mês (acumulado)
+  const mapLucroCess={};
+  let totalLucroCess=0, totalAtrasoDias=0, countAtrasoAtivos=0;
+  const detalheLucroCess=[];
+
+  ps.forEach(p=>{
+    const fm=p.data.find(m=>m.area==='frota');if(!fm)return;
+    fm.modelos.forEach(mo=>{
+      const vlr=mo.vlrUnit||0;if(!vlr)return;
+      mo.subgrupos.forEach(sg=>sg.ativos.forEach(a=>{
+        // ── CAPA DE CONTRATO PREVISTA ──────────────────────────
+        // Usa dtProg (programada) como referência do mês de início do contrato
+        const dtCapaPrev=a.dtProg||a.dtPrev;
+        if(dtCapaPrev){
+          const ym=dtCapaPrev.slice(0,7);
+          mapCapaPrev[ym]=(mapCapaPrev[ym]||0)+vlr;
+        }
+        // ── CAPA DE CONTRATO REALIZADA ─────────────────────────
+        if(a.dtExec){
+          const ym=a.dtExec.slice(0,7);
+          mapCapaReal[ym]=(mapCapaReal[ym]||0)+vlr;
+        }
+        // ── FATURAMENTO PROPORCIONAL PREVISTO ──────────────────
+        // Data programada → proporcional do mês
+        const dtProp=a.dtProg||a.dtPrev;
+        if(dtProp){
+          const prop=fatProporcional(vlr,dtProp);
+          const ym=dtProp.slice(0,7);
+          mapPropPrev[ym]=(mapPropPrev[ym]||0)+prop;
+        }
+        // ── FATURAMENTO PROPORCIONAL REALIZADO ─────────────────
+        // Data executada → proporcional do mês
+        if(a.dtExec){
+          const prop=fatProporcional(vlr,a.dtExec);
+          const ym=a.dtExec.slice(0,7);
+          mapPropReal[ym]=(mapPropReal[ym]||0)+prop;
+        }
+        // ── LUCRO CESSANTE ─────────────────────────────────────
+        // Atraso = dtExec - dtProg (dias de atraso)
+        // Lucro cessante = atraso × (vlr / diasNoMes(dtProg))
+        if(a.dtProg&&a.dtExec&&a.dtExec>a.dtProg){
+          const atraso=diffDiasStr(a.dtProg,a.dtExec);
+          const vlrDia=vlr/diasNoMes(a.dtProg);
+          const cess=atraso*vlrDia;
+          totalLucroCess+=cess;
+          totalAtrasoDias+=atraso;
+          countAtrasoAtivos++;
+          // Acumula no mês da data programada
+          const ym=a.dtProg.slice(0,7);
+          mapLucroCess[ym]=(mapLucroCess[ym]||0)+cess;
+          detalheLucroCess.push({
+            proj:p.nome, ativo:a.label, modelo:(mo.label||'').split('—')[1]||mo.label,
+            dtProg:a.dtProg, dtExec:a.dtExec, atraso, vlrDia, cess
+          });
+        }
+      }));
+    });
+  });
+
+  // ── RENDERIZAR GRÁFICOS ───────────────────────────────────────
+  // Arredondar valores dos mapas proporcionais
+  Object.keys(mapPropPrev).forEach(k=>mapPropPrev[k]=Math.round(mapPropPrev[k]));
+  Object.keys(mapPropReal).forEach(k=>mapPropReal[k]=Math.round(mapPropReal[k]));
+
+  // Capa de contrato (gráfico existente)
+  renderVcChart('vc-chart-prev','vc-chart-prev-lbl',mapCapaPrev,'var(--accent)');
+  renderVcChart('vc-chart-real','vc-chart-real-lbl',mapCapaReal,'var(--green)');
+
+  // Faturamento proporcional
+  renderVcChart('vc-chart-prop-prev','vc-chart-prop-prev-lbl',mapPropPrev,'#7c5cbf');
+  renderVcChart('vc-chart-prop-real','vc-chart-prop-real-lbl',mapPropReal,'#2d8a5e');
+
+  // Lucro cessante
+  const elLc=document.getElementById('vc-lucro-cess');
+  if(elLc){
+    if(totalLucroCess===0){
+      elLc.innerHTML='<div style="font-size:11px;color:var(--green);font-weight:500;">✓ Nenhum lucro cessante identificado — todas as mobilizações dentro do prazo.</div>';
+    } else {
+      const fmtYM2=ym=>{const[y,m]=ym.split('-');const ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];return(ms[+m-1]||m)+'/'+y.slice(2);};
+      elLc.innerHTML=`
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
+          <div style="background:#fef3f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;">
+            <div style="font-size:9.5px;color:#b91c1c;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:4px;">Total lucro cessante</div>
+            <div style="font-size:20px;font-weight:700;color:#b91c1c;">${fmtCur(Math.round(totalLucroCess))}</div>
+            <div style="font-size:10px;color:#b91c1c80;margin-top:2px;">receita não capturada por atraso</div>
+          </div>
+          <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px 14px;">
+            <div style="font-size:9.5px;color:#c2410c;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:4px;">Ativos com atraso</div>
+            <div style="font-size:20px;font-weight:700;color:#c2410c;">${countAtrasoAtivos}</div>
+            <div style="font-size:10px;color:#c2410c80;margin-top:2px;">de ${allAts.length} ativos no período</div>
+          </div>
+          <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px 14px;">
+            <div style="font-size:9.5px;color:#c2410c;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:4px;">Média de atraso</div>
+            <div style="font-size:20px;font-weight:700;color:#c2410c;">${countAtrasoAtivos?Math.round(totalAtrasoDias/countAtrasoAtivos):0} dias</div>
+            <div style="font-size:10px;color:#c2410c80;margin-top:2px;">por ativo atrasado</div>
+          </div>
+        </div>
+        <div style="border:1px solid var(--border-soft);border-radius:8px;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead>
+              <tr style="background:var(--surface2);">
+                <th style="padding:7px 10px;text-align:left;font-size:9.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Projeto</th>
+                <th style="padding:7px 10px;text-align:left;font-size:9.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Ativo</th>
+                <th style="padding:7px 10px;text-align:center;font-size:9.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Programado</th>
+                <th style="padding:7px 10px;text-align:center;font-size:9.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Executado</th>
+                <th style="padding:7px 10px;text-align:center;font-size:9.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Atraso</th>
+                <th style="padding:7px 10px;text-align:right;font-size:9.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Lucro cessante</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${detalheLucroCess.sort((a,b)=>b.cess-a.cess).map((d,i)=>`
+                <tr style="background:${i%2===0?'var(--white)':'var(--surface2)'};">
+                  <td style="padding:6px 10px;color:var(--text-dark);font-weight:500;">${d.proj}</td>
+                  <td style="padding:6px 10px;color:var(--text-dim);">${d.ativo} <span style="font-size:9.5px;color:var(--text-muted);">${d.modelo}</span></td>
+                  <td style="padding:6px 10px;text-align:center;font-family:monospace;font-size:10.5px;">${fmtD(d.dtProg)}</td>
+                  <td style="padding:6px 10px;text-align:center;font-family:monospace;font-size:10.5px;color:var(--red);">${fmtD(d.dtExec)}</td>
+                  <td style="padding:6px 10px;text-align:center;"><span style="background:#fee2e2;color:#b91c1c;padding:1px 7px;border-radius:6px;font-size:10px;font-weight:600;">+${d.atraso}d</span></td>
+                  <td style="padding:6px 10px;text-align:right;font-weight:600;color:#b91c1c;">${fmtCur(Math.round(d.cess))}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+  }
   renderCapexSection(ps);
 
   // ── RESUMO DAS OPERAÇÕES ──────────────────────────────────────
