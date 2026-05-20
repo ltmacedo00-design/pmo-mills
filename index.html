@@ -52,6 +52,23 @@ db.ref('projetos').on('value', function(snap){
     } catch(e){ return null; }
   }).filter(Boolean);
 
+  // Normalizar ativos: garantir que todo ativo tem personalizacoes[]
+  // (ativos salvos antes desse campo existir podem não ter)
+  function normalizarProjeto(proj){
+    if(!proj||!proj.data)return proj;
+    proj.data.forEach(function(macro){
+      if(macro.area!=='frota'||!macro.modelos)return;
+      macro.modelos.forEach(function(mo){
+        (mo.subgrupos||[]).forEach(function(sg){
+          (sg.ativos||[]).forEach(function(a){
+            if(!a.personalizacoes) a.personalizacoes=[];
+          });
+        });
+      });
+    });
+    return proj;
+  }
+
   // Merge seletivo: protege projetos com edição local pendente
   var now = Date.now();
   incoming.forEach(function(inProj){
@@ -64,6 +81,7 @@ db.ref('projetos').on('value', function(snap){
     if(isOpen || hasTimer || recentSave){
       return; // manter versão local
     }
+    normalizarProjeto(inProj);
     var idx = PROJETOS.findIndex(function(p){ return p.id === inProj.id; });
     if(idx >= 0){ PROJETOS[idx] = inProj; } else { PROJETOS.push(inProj); }
   });
@@ -815,7 +833,7 @@ var CARGOS_LIST=[];   // [string]
 var FILIAIS_LIST=[];  // [string]
 var importTab=0;      // 0=frota 1=cargos 2=filiais
 
-var uid=1; const nid=()=>'n'+(uid++);
+var uid=1; const nid=()=>'n'+Date.now().toString(36)+Math.random().toString(36).slice(2,4);
 var expState={};
 var activeFilter='todos';
 var currentProjId=null;
@@ -910,11 +928,11 @@ function wizCreate(){
     var editId = window._editProjId;
     var p=PROJETOS.find(function(x){return x.id===editId;});
     if(p){
-      // Identificação: sempre atualiza o que o usuário pode ter mudado
-      if(WD.nome)    p.nome    = WD.nome;
-      if(WD.cliente) p.cliente = WD.cliente;
-      if(WD.local)   p.local   = WD.local;
-      if(WD.mob)     p.mob     = WD.mob;
+      // Identificação: atualiza sempre (inclusive se usuário apagou o campo)
+      p.nome    = WD.nome    || p.nome;
+      p.cliente = WD.cliente || p.cliente;
+      p.local   = WD.local   || p.local;
+      p.mob     = WD.mob     || p.mob;
       p.comercial = WD.comercial||p.comercial||'';
       p.contrato  = WD.contrato||p.contrato||'';
 
@@ -944,7 +962,7 @@ function wizCreate(){
     window._editProjId=null;
   } else {
     // Novo projeto: cria, empurra, e guarda referência direta
-    var novoProj={id:'p'+uid++,nome:WD.nome||'Novo projeto',cliente:WD.cliente||'—',local:WD.local||'—',mob:WD.mob||today(),comercial:WD.comercial||'',data:buildData()};
+    var novoProj={id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),nome:WD.nome||'Novo projeto',cliente:WD.cliente||'—',local:WD.local||'—',mob:WD.mob||today(),comercial:WD.comercial||'',contrato:WD.contrato||'',data:buildData()};
     PROJETOS.push(novoProj);
     projParaSalvar = novoProj; // referência direta, sem find posterior
     window._editProjId=null;
@@ -1090,7 +1108,7 @@ function confirmDel(){
   if(!delProjId)return;
   var _did=delProjId;
   PROJETOS=PROJETOS.filter(function(p){return p.id!==_did;});
-  if(currentProjId===_did){currentProjId=null;goHome();}
+  if(currentProjId===_did){currentProjId=null;if(_saveTimers[_did]){clearTimeout(_saveTimers[_did]);delete _saveTimers[_did];}hideAllViews();document.getElementById('view-home').classList.add('active');renderHome();renderSidebar();}
   closeDel();renderHome();renderSidebar();populateKanFilters();populateComercialFilter();
   dbExcluirProjeto(_did);
 }
@@ -1144,7 +1162,7 @@ Object.defineProperty(window,'_saveTimer',{
   set: function(v){ if(currentProjId){ if(v===null){ delete _saveTimers[currentProjId]; } else { _saveTimers[currentProjId]=v; } } }
 });
 function isConc(p){const a=allAtivos(p.data);return a.length>0&&a.every(x=>x.status==='sf-ent');}
-function fatMes(p){const fm=p.data.find(m=>m.area==='frota');if(!fm)return 0;return fm.modelos.reduce((s,mo)=>s+(mo.vlrUnit||0)*mo.qtd,0);}
+function fatMes(p){const fm=p.data.find(m=>m.area==='frota');if(!fm)return 0;return fm.modelos.reduce((s,mo)=>{const qtd=mo.subgrupos&&mo.subgrupos[0]?mo.subgrupos[0].ativos.length:(mo.qtd||0);return s+(mo.vlrUnit||0)*qtd;},0);}
 function pendRes(p){const fm=p.data.find(m=>m.area==='frota');if(!fm||!fm.modelos)return '—';const r=[];fm.modelos.forEach(mo=>{let pend=0,ds=[];mo.subgrupos.forEach(sg=>sg.ativos.forEach(a=>{if(a.status!=='sf-ent'){pend++;const d=a.dtReprog||a.dtProg;if(d)ds.push(d);}}));if(pend>0){const d=ds.sort()[0];r.push(`${(mo.label.split('—')[1]||mo.label).trim()}: ${pend}un.${d?' ('+fmtD(d)+')':''}`);}});return r.length?r.join(' · '):'Tudo entregue';}
 
 // ── RECEITA CHART ──────────────────────────
@@ -1363,6 +1381,7 @@ function openProj(pid){
     if(_prevProj) dbSalvarProjeto(_prevProj);
   }
   currentProjId=pid;const p=getProj();
+  if(p) normalizarProjeto(p); // garante personalizacoes[] em todos os ativos
   if(!p)return;
   // make sure navtab shows Projetos
   document.querySelectorAll('.ntab').forEach((t,j)=>t.classList.toggle('active',j===0));
@@ -1489,7 +1508,7 @@ function remAtivoMo(moId){
   renderLista();renderKPIs();
   dbSalvarProjeto(p);
 }
-function addPersA(aId){const l=prompt('Personalização:');if(!l)return;const a=findG(aId);if(!a)return;const pn={id:nid(),_pers:true,label:l,status:'sp-req',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:''};expState[pn.id]=true;a.personalizacoes.push(pn);expState[aId]=true;renderLista();const _pp=getProj();if(_pp)dbSalvarProjeto(_pp);}
+function addPersA(aId){const l=prompt('Personalização:');if(!l)return;const a=findG(aId);if(!a)return;if(!a.personalizacoes)a.personalizacoes=[];const pn={id:nid(),_pers:true,label:l,status:'sp-req',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:''};expState[pn.id]=true;a.personalizacoes.push(pn);expState[aId]=true;renderLista();const _pp=getProj();if(_pp)dbSalvarProjeto(_pp);}
 function inpName(id,val,w){
   const dlId='dl-'+id;
   const dl=FROTA_CATALOG.length?`<datalist id="${dlId}">${FROTA_CATALOG.map(a=>`<option value="${a.numAtivo}">${a.numAtivo} — ${a.tipo} ${a.modelo}</option>`).join('')}</datalist>`:'';
