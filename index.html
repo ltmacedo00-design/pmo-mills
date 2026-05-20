@@ -84,18 +84,34 @@ db.ref('projetos').on('value', function(snap){
   }
 });
 
-// Escutar catálogos em tempo real
-var _lastCatalogoSaveTs = 0; // timestamp do último save do catálogo
+// ── CATÁLOGO: 3 listeners independentes ─────────────────────────
+// Cada seção é salva/lida separadamente — importar frota NÃO apaga cargos
+var _lastFrotaSaveTs   = 0;
+var _lastCargosSaveTs  = 0;
+var _lastFiliaisSaveTs = 0;
 
-db.ref('catalogo').on('value', function(snap){
+db.ref('catalogo/frota').on('value', function(snap){
   var val = snap.val();
   if(!val) return;
-  // Não sobrescrever se acabamos de salvar (echo do nosso próprio save)
-  var now = Date.now();
-  if(now - _lastCatalogoSaveTs < 5000) return;
-  if(val.frota)   FROTA_CATALOG = val.frota;
-  if(val.cargos)  CARGOS_LIST   = val.cargos;
-  if(val.filiais) FILIAIS_LIST  = val.filiais;
+  if(Date.now() - _lastFrotaSaveTs < 5000) return;
+  FROTA_CATALOG = Array.isArray(val) ? val : Object.values(val);
+  console.log('[PMO] Frota carregada:', FROTA_CATALOG.length, 'ativos');
+});
+
+db.ref('catalogo/cargos').on('value', function(snap){
+  var val = snap.val();
+  if(!val) return;
+  if(Date.now() - _lastCargosSaveTs < 5000) return;
+  CARGOS_LIST = Array.isArray(val) ? val : Object.values(val);
+  console.log('[PMO] Cargos carregados:', CARGOS_LIST.length);
+});
+
+db.ref('catalogo/filiais').on('value', function(snap){
+  var val = snap.val();
+  if(!val) return;
+  if(Date.now() - _lastFiliaisSaveTs < 5000) return;
+  FILIAIS_LIST = Array.isArray(val) ? val : Object.values(val);
+  console.log('[PMO] Filiais carregadas:', FILIAIS_LIST.length);
 });
 
 // Salvar projeto
@@ -118,17 +134,28 @@ function dbExcluirProjeto(id){
     .catch(function(e){ console.error('Erro excluir:', e.message); });
 }
 
-// Salvar catálogos
+// Salvar catálogo — cada seção salva separadamente
+function dbSalvarFrota(){
+  _lastFrotaSaveTs = Date.now();
+  db.ref('catalogo/frota').set(FROTA_CATALOG)
+    .then(function(){ mostrarSalvo(); _lastFrotaSaveTs = Date.now(); console.log('[PMO] Frota salva:', FROTA_CATALOG.length); })
+    .catch(function(e){ console.error('[PMO] Erro frota:', e.message); });
+}
+function dbSalvarCargos(){
+  _lastCargosSaveTs = Date.now();
+  db.ref('catalogo/cargos').set(CARGOS_LIST)
+    .then(function(){ mostrarSalvo(); _lastCargosSaveTs = Date.now(); console.log('[PMO] Cargos salvos:', CARGOS_LIST.length); })
+    .catch(function(e){ console.error('[PMO] Erro cargos:', e.message); });
+}
+function dbSalvarFiliais(){
+  _lastFiliaisSaveTs = Date.now();
+  db.ref('catalogo/filiais').set(FILIAIS_LIST)
+    .then(function(){ mostrarSalvo(); _lastFiliaisSaveTs = Date.now(); console.log('[PMO] Filiais salvas:', FILIAIS_LIST.length); })
+    .catch(function(e){ console.error('[PMO] Erro filiais:', e.message); });
+}
+// Compat: dbSalvarCatalogo salva tudo (usado em casos legados)
 function dbSalvarCatalogo(){
-  _lastCatalogoSaveTs = Date.now(); // bloqueia listener por 5s
-  db.ref('catalogo').set({
-    frota:   FROTA_CATALOG,
-    cargos:  CARGOS_LIST,
-    filiais: FILIAIS_LIST
-  }).then(function(){
-    mostrarSalvo();
-    _lastCatalogoSaveTs = Date.now(); // renova proteção após confirmação
-  }).catch(function(e){ console.error('Erro catálogo:', e.message); });
+  dbSalvarFrota(); dbSalvarCargos(); dbSalvarFiliais();
 }
 
 function mostrarSalvo(){
@@ -1811,7 +1838,7 @@ function renderFrotaTable(){
     <tbody>${FROTA_CATALOG.slice(0,50).map(a=>`<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-soft);">${a.numAtivo}</td><td style="padding:4px 8px;border-bottom:1px solid var(--border-soft);">${a.tipo}</td><td style="padding:4px 8px;border-bottom:1px solid var(--border-soft);">${a.modelo}</td></tr>`).join('')}
     ${FROTA_CATALOG.length>50?`<tr><td colspan="3" style="padding:5px 8px;color:var(--text-muted);">...e mais ${FROTA_CATALOG.length-50}</td></tr>`:''}</tbody>
   </table></div>
-  <button onclick="FROTA_CATALOG=[];dbSalvarCatalogo();renderFrotaTable();" style="margin-top:6px;background:none;border:1px solid var(--red);border-radius:5px;padding:3px 10px;font-size:11px;color:var(--red);cursor:pointer;">Limpar catálogo</button>`;
+  <button onclick="FROTA_CATALOG=[];dbSalvarFrota();renderFrotaTable();" style="margin-top:6px;background:none;border:1px solid var(--red);border-radius:5px;padding:3px 10px;font-size:11px;color:var(--red);cursor:pointer;">Limpar catálogo</button>`;
 }
 // parseFiliais: definida abaixo
 
@@ -1822,9 +1849,9 @@ function renderCargosTable(){
   if(!el)return;
   el.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--green);margin-bottom:6px;">✓ ${CARGOS_LIST.length} cargos carregados</div>
   <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:140px;overflow-y:auto;">
-    ${CARGOS_LIST.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:8px;font-size:10.5px;background:var(--blue-bg);color:var(--blue);border:1px solid #b8d8ee;">${c}<span onclick="CARGOS_LIST.splice(${i},1);dbSalvarCatalogo();renderCargosTable();" style="cursor:pointer;"> ×</span></span>`).join('')}
+    ${CARGOS_LIST.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:8px;font-size:10.5px;background:var(--blue-bg);color:var(--blue);border:1px solid #b8d8ee;">${c}<span onclick="CARGOS_LIST.splice(${i},1);dbSalvarCargos();renderCargosTable();" style="cursor:pointer;"> ×</span></span>`).join('')}
   </div>
-  <button onclick="CARGOS_LIST=[];dbSalvarCatalogo();renderCargosTable();" style="margin-top:6px;background:none;border:1px solid var(--red);border-radius:5px;padding:3px 10px;font-size:11px;color:var(--red);cursor:pointer;">Limpar lista</button>`;
+  <button onclick="CARGOS_LIST=[];dbSalvarCargos();renderCargosTable();" style="margin-top:6px;background:none;border:1px solid var(--red);border-radius:5px;padding:3px 10px;font-size:11px;color:var(--red);cursor:pointer;">Limpar lista</button>`;
 }
 
 // ── EDIT PROJETO ──────────────────────────────────────
@@ -2291,6 +2318,7 @@ function parseFrotaPaste(){
     }
   }
   FROTA_CATALOG=catalog;
+  dbSalvarFrota(); // salva SÓ a frota — não toca em cargos/filiais
   document.getElementById('frota-result').innerHTML=
     `<div style="background:var(--green-bg);border:1px solid #b8e4d0;border-radius:7px;padding:10px 14px;font-size:12px;color:var(--green);">
       ✓ <strong>${catalog.length} ativos</strong> importados com sucesso.<br>
@@ -2299,7 +2327,6 @@ function parseFrotaPaste(){
         ${catalog.length>8?`<span style="font-size:10px;color:var(--text-muted);"> ...e mais ${catalog.length-8}</span>`:''}
       </div>
     </div>`;
-  dbSalvarCatalogo();
 }
 function handleFrotaFile(file){
   if(!file)return;
@@ -2321,7 +2348,7 @@ function parseFiliais(){
     +'<strong>'+FILIAIS_LIST.length+' filial(is)</strong> importada(s) com sucesso.<br>'
     +'<div style="margin-top:6px;">'+FILIAIS_LIST.map(function(f){return '<span style="font-size:10px;background:var(--white);border:1px solid var(--border-soft);border-radius:4px;padding:1px 6px;margin:2px;display:inline-block;">'+f+'</span>';}).join('')+'</div>'
     +'</div>';
-  dbSalvarCatalogo();
+  dbSalvarFiliais(); // salva SÓ as filiais
 }
 function parseCargos(){
   const raw=document.getElementById('paste-cargos').value.trim();
@@ -2335,7 +2362,7 @@ function parseCargos(){
       ✓ <strong>${CARGOS_LIST.length} cargos</strong> importados com sucesso.<br>
       <div style="margin-top:6px;">${CARGOS_LIST.map(c=>`<span style="font-size:10px;background:var(--white);border:1px solid var(--border-soft);border-radius:4px;padding:1px 6px;margin:2px;display:inline-block;">${c}</span>`).join('')}</div>
     </div>`;
-  dbSalvarCatalogo();
+  dbSalvarCargos(); // salva SÓ os cargos
 }
 
 // ── ADMIN: Edição de projetos ─────────────────────────────────────────
@@ -2459,6 +2486,29 @@ function showSaved(){
 
 // ── INIT ───────────────────────────────────
 window.__appReady = true;
+
+// Detectar file:// e avisar o usuário
+if(window.location.protocol === 'file:'){
+  // Mostrar banner de aviso
+  setTimeout(function(){
+    var banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b05a10;color:#fff;padding:10px 20px;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:space-between;';
+    banner.innerHTML = '<span>⚠ <strong>Firebase não funciona via file://</strong> — Para gravar os dados, use um servidor local: <code style="background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:3px;">python -m http.server 8000</code> e acesse <strong>http://localhost:8000/mills_pmo.html</strong></span><button onclick="this.parentNode.remove()" style="background:none;border:1px solid rgba(255,255,255,0.5);color:#fff;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px;flex-shrink:0;margin-left:16px;">Entendi</button>';
+    document.body.prepend(banner);
+  }, 1000);
+  console.warn('[PMO] ⚠ Rodando via file:// — Firebase não consegue gravar. Use: python -m http.server 8000');
+} else {
+  // Teste de escrita no Firebase
+  db.ref('catalogo/_ping').set(Date.now())
+    .then(function(){ 
+      console.log('[PMO] ✓ Firebase: permissão de escrita OK');
+      db.ref('catalogo/_ping').remove();
+    })
+    .catch(function(e){ 
+      console.error('[PMO] ✗ Firebase BLOQUEOU escrita:', e.code, e.message);
+    });
+}
+
 // Remove loader immediately — app is ready
 var _ldr = document.getElementById('fb-loader');
 if(_ldr && _ldr.parentNode) _ldr.parentNode.removeChild(_ldr);
