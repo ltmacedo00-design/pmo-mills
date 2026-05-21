@@ -1088,7 +1088,26 @@ function wdReset(){WD={nome:'',cliente:'',local:'',contrato:'',mob:'',comercial:
 wdReset();
 function openWiz(){wdReset();wizStep=0;document.getElementById('ov-wiz').classList.add('open');renderWiz();}
 function closeWiz(){document.getElementById('ov-wiz').classList.remove('open');}
-function wizSave(){if(wizStep===0){['nome','cliente','local','contrato','mob','comercial'].forEach(f=>{const el=document.getElementById('w-'+f);if(el)WD[f]=el.value;});}}
+function wizSave(){
+  // Coleta campos de QUALQUER step que estiver visível
+  // Step 0: identificação
+  ['nome','cliente','local','contrato','mob','comercial'].forEach(function(f){
+    var el=document.getElementById('w-'+f);
+    if(el) WD[f]=el.value;
+  });
+  // Steps 1+: equipamentos — percorre todos os inputs de frota visíveis
+  // Os campos inline já escrevem diretamente no WD via onchange
+  // Mas inputs type=number podem não ter disparado onchange se o usuário
+  // só clicou no campo sem sair — forçar coleta manual
+  var equipInputs=document.querySelectorAll('[data-equip-idx][data-equip-field]');
+  equipInputs.forEach(function(el){
+    var i=parseInt(el.dataset.equipIdx);
+    var f=el.dataset.equipField;
+    if(!WD.equips[i])return;
+    if(el.type==='number') WD.equips[i][f]=parseFloat(el.value)||0;
+    else WD.equips[i][f]=el.value;
+  });
+}
 function wizNext(){wizSave();if(wizStep===WIZ_STEPS.length-1){wizCreate();return;}wizStep++;renderWiz();}
 function wizPrev(){if(wizStep>0){wizSave();wizStep--;renderWiz();}}
 function wizCreate(){
@@ -1106,24 +1125,25 @@ function wizCreate(){
       p.comercial = WD.comercial||p.comercial||'';
       p.contrato  = WD.contrato||p.contrato||'';
 
-      // Frota: compara campo a campo com o snapshot original
-      // SÓ atualiza o campo se o usuário efetivamente mudou o valor
+      // Frota: atualiza configuração dos modelos existentes
+      // NUNCA recria ativos, subgrupos, personalizações, status ou datas
       const fm=p.data.find(function(m){return m.area==='frota';});
-      const orig=window._wizOriginal||{equips:[]};
       if(fm){
         WD.equips.forEach(function(e,i){
           const mo=fm.modelos[i];
-          if(!mo) return; // não adiciona novos modelos pelo wizard de edição
-          const o=orig.equips[i]||{};
-          // Só atualiza campo se valor mudou em relação ao original
-          if(e.vlrUnit  !== o.vlrUnit)  mo.vlrUnit  = parseFloat(e.vlrUnit)||0;
-          if(e.capex    !== o.capex)    mo.capex    = parseFloat(e.capex)||0;
-          if(e.mobPrev  !== o.mobPrev)  mo.mobPrev  = e.mobPrev||mo.mobPrev;
-          if(e.cond     !== o.cond)     mo.cond     = e.cond||mo.cond;
-          // Personalização (persList): só atualiza se o usuário tocou na lista
-          const persListChanged = JSON.stringify(e.persList) !== JSON.stringify(o.persList);
-          if(persListChanged) mo.personalizacoes = e.persList;
-          // NUNCA altera: ativos, subgrupos, qtd de ativos, status, datas preenchidas
+          if(!mo) return;
+          // Sempre atualiza campos de configuração financeira/logística
+          mo.vlrUnit = parseFloat(e.vlrUnit)||mo.vlrUnit||0;
+          mo.capex   = parseFloat(e.capex)  ||mo.capex  ||0;
+          if(e.mobPrev) mo.mobPrev = e.mobPrev;
+          if(e.cond)    mo.cond    = e.cond;
+          // Label/tipo/modelo: só atualiza se preenchidos
+          if(e.tipo)   mo.tipo   = e.tipo;
+          if(e.modelo) mo.modelo = e.modelo;
+          if(e.tipo&&e.modelo) mo.label = e.tipo+' — '+e.modelo;
+          // Personalização do modelo (lista de strings): atualiza direto
+          if(e.persList&&e.persList.length!==undefined) mo.personalizacoes = e.persList;
+          // NUNCA toca: mo.subgrupos, ativos, status dos ativos, datas dos ativos
         });
       }
       window._wizOriginal = null;
@@ -1228,11 +1248,11 @@ function renderWiz(){
       <div class="wr"><div><label class="wlabel">Tipo</label>${wizTipoHtml(i,e)}</div><div><label class="wlabel">Modelo</label>${wizModeloHtml(i,e)}</div></div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px;">
         <div><label class="wlabel">Condição</label><select class="winput" onchange="WD.equips[${i}].cond=this.value"><option value="nova"${e.cond==='nova'?' selected':''}>Nova</option><option value="usada"${e.cond==='usada'?' selected':''}>Usada</option><option value="capex"${e.cond==='capex'?' selected':''}>CAPEX</option></select></div>
-        <div><label class="wlabel">Quantidade</label><input class="winput" type="number" min="1" value="${e.qtd}" onchange="WD.equips[${i}].qtd=+this.value"></div>
-        <div><label class="wlabel">Vlr. unit. loc. (R$)</label><input class="winput" type="number" min="0" value="${e.vlrUnit||''}" placeholder="0,00" onchange="WD.equips[${i}].vlrUnit=+this.value"></div>
-        <div><label class="wlabel">Vlr. CAPEX (R$)</label><input class="winput" type="number" min="0" value="${e.capex||''}" placeholder="0,00" onchange="WD.equips[${i}].capex=+this.value"></div>
+        <div><label class="wlabel">Quantidade</label><input class="winput" type="number" min="1" value="${e.qtd}" onchange="WD.equips[${i}].qtd=+this.value" data-equip-idx="${i}" data-equip-field="qtd"></div>
+        <div><label class="wlabel">Vlr. unit. loc. (R$)</label><input class="winput" type="number" min="0" value="${e.vlrUnit||''}" placeholder="0,00" onchange="WD.equips[${i}].vlrUnit=+this.value" data-equip-idx="${i}" data-equip-field="vlrUnit"></div>
+        <div><label class="wlabel">Vlr. CAPEX (R$)</label><input class="winput" type="number" min="0" value="${e.capex||''}" placeholder="0,00" onchange="WD.equips[${i}].capex=+this.value" data-equip-idx="${i}" data-equip-field="capex"></div>
       </div>
-      <div class="wr" style="margin-top:6px;"><div><label class="wlabel">Prev. mob.</label><input class="winput" type="date" value="${e.mobPrev}" onchange="WD.equips[${i}].mobPrev=this.value"></div><div></div></div>
+      <div class="wr" style="margin-top:6px;"><div><label class="wlabel">Prev. mob.</label><input class="winput" type="date" value="${e.mobPrev}" onchange="WD.equips[${i}].mobPrev=this.value" data-equip-idx="${i}" data-equip-field="mobPrev"></div><div></div></div>
       <div style="margin-top:6px;"><label class="wlabel">Personalização?</label>
         <div style="display:flex;gap:7px;margin-bottom:5px;"><button class="yn yes${e.pers===true?' on':''}" onclick="WD.equips[${i}].pers=true;renderWiz()">Sim</button><button class="yn no${e.pers===false?' on':''}" onclick="WD.equips[${i}].pers=false;renderWiz()">Não</button></div>
         ${e.pers===true?`<div style="background:var(--surface2);border-radius:6px;padding:8px;"><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px;">${e.persList.map((p,pi)=>`<span class="tag-chip">${p}<span onclick="WD.equips[${i}].persList.splice(${pi},1);renderWiz()" style="cursor:pointer;"> ×</span></span>`).join('')}</div><select class="winput" style="margin-bottom:5px;" onchange="if(this.value&&!WD.equips[${i}].persList.includes(this.value)){WD.equips[${i}].persList.push(this.value);renderWiz();}this.value=''"><option value="">+ Da lista padrão...</option>${PERS_BASE.filter(p=>!e.persList.includes(p)).map(p=>`<option value="${p}">${p}</option>`).join('')}</select><div style="display:flex;gap:5px;"><input class="winput" id="np${i}" placeholder="Personalização livre..." style="margin-bottom:0;flex:1;"><button onclick="const v=document.getElementById('np${i}').value.trim();if(v&&!WD.equips[${i}].persList.includes(v)){WD.equips[${i}].persList.push(v);renderWiz();}" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:0 10px;font-size:11px;cursor:pointer;">Add</button></div></div>`:''}
