@@ -112,6 +112,12 @@ db.ref('catalogo/filiais').on('value', function(snap){
   if(Date.now() - _lastFiliaisSaveTs < 5000) return;
   FILIAIS_LIST = Array.isArray(val) ? val : Object.values(val);
   console.log('[PMO] Filiais carregadas:', FILIAIS_LIST.length);
+  // Re-renderizar lista de tarefas se projeto estiver aberto
+  // para que os selects de filial usem a lista atualizada
+  if(currentProjId && document.getElementById('tab-lista') &&
+     document.getElementById('tab-lista').classList.contains('active')){
+    try{ renderLista(); }catch(e){}
+  }
 });
 
 // Salvar projeto
@@ -352,6 +358,9 @@ select{width:100%;}
 
 /* CHART */
 .chart-wrap{background:var(--white);border:1px solid var(--border-soft);border-radius:10px;padding:12px 16px;}
+.htab{flex:1;background:none;border:none;font-size:11px;font-family:inherit;color:var(--text-dim);padding:4px 6px;border-radius:5px;cursor:pointer;transition:.15s;}
+.htab:hover{color:var(--text-dark);}
+.htab.htab-on{background:var(--white);color:var(--text-dark);font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.08);}
 .chart-title{font-size:12px;font-weight:600;color:var(--text-dark);margin-bottom:16px;}
 .chart-svg-wrap{width:100%;overflow:visible;}
 .chart-legend{display:flex;gap:14px;margin-top:10px;}
@@ -657,17 +666,17 @@ table.pmo tr:last-child td{border-bottom:none;}
 
     <!-- Gráfico + Insights lado a lado -->
     <div class="home-mid-row">
-      <!-- Gráfico receita -->
+      <!-- Gráfico receita — 3 abas -->
       <div class="chart-wrap" id="chart-wrap">
-        <div class="chart-title">📈 Previsão de acréscimo de receita mensal (base: entrega de ativos)</div>
-        <div class="chart-inner" style="height:auto;">
-          <div id="bar-chart" style="width:100%;"></div>
-          <div id="bar-labels"></div>
+        <!-- Abas -->
+        <div style="display:flex;gap:2px;margin-bottom:12px;background:var(--surface2);border-radius:7px;padding:3px;">
+          <button id="htab-capa"   class="htab htab-on"  onclick="setHomeTab('capa')"  >Capa de contrato</button>
+          <button id="htab-prop"   class="htab"          onclick="setHomeTab('prop')"  >Fat. proporcional</button>
         </div>
-        <div class="chart-legend">
-          <div class="leg-item"><div class="leg-dot" style="background:var(--accent);"></div>Receita prevista acumulada</div>
-          <div class="leg-item"><div class="leg-dot" style="background:var(--green);opacity:.6;"></div>Já entregue</div>
-        </div>
+        <div id="home-chart-title" class="chart-title" style="margin-bottom:8px;"></div>
+        <div id="bar-chart" style="width:100%;"></div>
+        <div id="bar-labels"></div>
+        <div id="home-chart-legend" class="chart-legend" style="margin-top:6px;"></div>
       </div>
       <!-- Insights -->
       <div class="insights-col">
@@ -675,6 +684,9 @@ table.pmo tr:last-child td{border-bottom:none;}
         <div id="home-insights"></div>
       </div>
     </div>
+
+    <!-- Lucro cessante resumo -->
+    <div id="home-lucro-cess" style="margin-bottom:14px;display:none;"></div>
 
     <!-- Em andamento -->
     <div class="home-sec">Em andamento</div>
@@ -1383,48 +1395,100 @@ function pendRes(p){const fm=p.data.find(m=>m.area==='frota');if(!fm||!fm.modelo
 
 // ── RECEITA CHART ──────────────────────────
 function buildRevenueData(){
-  // collect (month, revenue) from each ativo based on dtPrev/dtProg/dtReprog and vlrUnit
-  const map={};
+  // Retorna 3 mapas: capa (mensal cheio), prop (proporcional), acum (acumulado)
+  const mapCapa={}, mapProp={}, mapReal={}, mapRealProp={};
+  function diasMes(dt){const d=new Date(dt+'T00:00:00');return new Date(d.getFullYear(),d.getMonth()+1,0).getDate();}
+  function diaMes(dt){return new Date(dt+'T00:00:00').getDate();}
+  function fatProp(vlr,dt){const tot=diasMes(dt);return Math.round(vlr*(tot-diaMes(dt)+1)/tot);}
+
   PROJETOS.filter(p=>!isConc(p)).forEach(p=>{
     const fm=p.data.find(m=>m.area==='frota');if(!fm)return;
     fm.modelos.forEach(mo=>{
-      const vlr=mo.vlrUnit||0;
+      const vlr=mo.vlrUnit||0;if(!vlr)return;
       mo.subgrupos.forEach(sg=>sg.ativos.forEach(a=>{
-        const dt=a.dtReprog||a.dtProg||a.dtPrev;if(!dt||vlr===0)return;
-        const ym=dt.slice(0,7);map[ym]=(map[ym]||0)+vlr;
+        // data programada (prevista)
+        const dtP=a.dtProg||a.dtPrev;
+        if(dtP){
+          const ym=dtP.slice(0,7);
+          mapCapa[ym]=(mapCapa[ym]||0)+vlr;           // capa: mensal cheio
+          mapProp[ym]=(mapProp[ym]||0)+fatProp(vlr,dtP); // proporcional
+        }
+        // data executada
+        if(a.dtExec){
+          const ym=a.dtExec.slice(0,7);
+          mapReal[ym]=(mapReal[ym]||0)+vlr;
+          mapRealProp[ym]=(mapRealProp[ym]||0)+fatProp(vlr,a.dtExec);
+        }
       }));
     });
   });
-  return map;
+  return {capa:mapCapa, prop:mapProp, real:mapReal, realProp:mapRealProp};
+}
+var _homeTab='capa';
+function setHomeTab(tab){
+  _homeTab=tab;
+  ['capa','prop','acum'].forEach(function(t){
+    var el=document.getElementById('htab-'+t);
+    if(el)el.classList.toggle('htab-on',t===tab);
+  });
+  renderRevenueChart();
 }
 function renderRevenueChart(){
-  const map=buildRevenueData();const keys=Object.keys(map).sort();
-  if(!keys.length){return;}
-  const td=today().slice(0,7);
-  let acc=0;const bars=keys.map(k=>{acc+=map[k];return{ym:k,add:map[k],acc,done:k<=td};});
-  const maxV=bars.reduce((m,b)=>Math.max(m,b.acc),0)||1;
-  const fmtK=v=>v>=1000000?'R$ '+(v/1000000).toFixed(1)+' mi':v>=1000?'R$ '+(v/1000).toFixed(0)+' mil':'R$ '+v;
-  const fmtYM=ym=>{const[y,m]=ym.split('-');const ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];return (ms[+m-1]||m)+'/'+y.slice(2);};
-  const W=380,chartH=55,padT=14,padB=18,padL=8,padR=8;
-  const plotW=W-padL-padR;
-  const n=bars.length;
-  const step=plotW/Math.max(n,1);
-  const bw=Math.max(10,Math.min(32,step*0.4));
-  const totalH=padT+chartH+padB;
-  let svg=`<svg viewBox="0 0 ${W} ${totalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;">`;
-  // Linha base apenas — sem grid, sem eixo Y
-  svg+=`<line x1="${padL}" y1="${padT+chartH}" x2="${padL+plotW}" y2="${padT+chartH}" stroke="#e8eef2" stroke-width="1"/>`;
-  // Barras
-  bars.forEach((b,i)=>{
-    const cx=padL+step*i+step/2;
-    const x=cx-bw/2;
-    const bh=Math.max(2,Math.round(b.acc/maxV*chartH));
-    const by=padT+chartH-bh;
-    const color=b.done?'#3a9a6e':'#e8620a';
-    svg+=`<rect x="${x}" y="${by}" width="${bw}" height="${bh}" fill="${color}" opacity="${b.done?0.72:0.92}" rx="3">`;
-    svg+=`<title>${fmtYM(b.ym)}: +${fmtCur(b.add)} | Acum: ${fmtCur(b.acc)}</title></rect>`;
-    svg+=`<text x="${cx}" y="${by-4}" font-size="7.5" fill="${color}" text-anchor="middle" font-weight="600">${fmtK(b.acc)}</text>`;
-    svg+=`<text x="${cx}" y="${padT+chartH+padB-5}" font-size="7.5" fill="#9eb0ba" text-anchor="middle">${fmtYM(b.ym)}</text>`;
+  var maps=buildRevenueData();
+  var td=today().slice(0,7);
+  var mapPrev, mapReal, titleTxt, legendPrev, legendReal;
+  if(_homeTab==='capa'){
+    mapPrev=maps.capa; mapReal=maps.real;
+    titleTxt='📄 Capa de contrato — mensal cheio por mês de início';
+    legendPrev='Previsto (data prog.)'; legendReal='Realizado (data exec.)';
+  } else if(_homeTab==='prop'){
+    mapPrev=maps.prop; mapReal=maps.realProp;
+    titleTxt='⚖️ Fat. proporcional — valor fracionado pelo dia de início no mês';
+    legendPrev='Previsto proporcional'; legendReal='Realizado proporcional';
+  }
+  var titleEl=document.getElementById('home-chart-title');
+  if(titleEl)titleEl.textContent=titleTxt;
+  var legEl=document.getElementById('home-chart-legend');
+  if(legEl)legEl.innerHTML=
+    '<div class="leg-item"><div class="leg-dot" style="background:#e8620a;"></div>'+legendPrev+'</div>'
+   +'<div class="leg-item"><div class="leg-dot" style="background:#3a9a6e;opacity:.8;"></div>'+legendReal+'</div>';
+
+  // Unir todas as chaves de mês
+  var allKeys=[...new Set([...Object.keys(mapPrev),...Object.keys(mapReal)])].sort();
+  var fmtK=function(v){return v>=1000000?'R$ '+(v/1000000).toFixed(1)+' mi':v>=1000?'R$ '+(v/1000).toFixed(0)+' mil':'R$ '+v;};
+  var fmtYM=function(ym){var parts=ym.split('-');var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];return (ms[+parts[1]-1]||parts[1])+'/'+parts[0].slice(2);};
+  var maxV=allKeys.reduce(function(m,k){return Math.max(m,mapPrev[k]||0,mapReal[k]||0);},1);
+
+  // Duas séries side-by-side por mês
+  var W=380,chartH=55,padT=14,padB=18,padL=8,padR=8;
+  var plotW=W-padL-padR;
+  var n=allKeys.length;
+  var step=plotW/Math.max(n,1);
+  var bw=Math.max(5,Math.min(14,step*0.35));
+  var gap=1;
+  var totalH=padT+chartH+padB;
+  var svg='<svg viewBox="0 0 '+W+' '+totalH+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;">';
+  svg+='<line x1="'+padL+'" y1="'+(padT+chartH)+'" x2="'+(padL+plotW)+'" y2="'+(padT+chartH)+'" stroke="#e8eef2" stroke-width="1"/>';
+  allKeys.forEach(function(k,i){
+    var cx=padL+step*i+step/2;
+    var vP=mapPrev[k]||0, vR=mapReal[k]||0;
+    var bhP=vP?Math.max(2,Math.round(vP/maxV*chartH)):0;
+    var bhR=vR?Math.max(2,Math.round(vR/maxV*chartH)):0;
+    // Barra previsto (laranja)
+    if(bhP){
+      var xP=cx-bw-gap/2;
+      svg+='<rect x="'+xP+'" y="'+(padT+chartH-bhP)+'" width="'+bw+'" height="'+bhP+'" fill="#e8620a" opacity="0.85" rx="2">';
+      svg+='<title>'+fmtYM(k)+' Prev: '+fmtCur(vP)+'</title></rect>';
+      svg+='<text x="'+(xP+bw/2)+'" y="'+(padT+chartH-bhP-3)+'" font-size="6.5" fill="#e8620a" text-anchor="middle" font-weight="600">'+fmtK(vP)+'</text>';
+    }
+    // Barra realizado (verde)
+    if(bhR){
+      var xR=cx+gap/2;
+      svg+='<rect x="'+xR+'" y="'+(padT+chartH-bhR)+'" width="'+bw+'" height="'+bhR+'" fill="#3a9a6e" opacity="0.78" rx="2">';
+      svg+='<title>'+fmtYM(k)+' Real: '+fmtCur(vR)+'</title></rect>';
+      svg+='<text x="'+(xR+bw/2)+'" y="'+(padT+chartH-bhR-3)+'" font-size="6.5" fill="#3a9a6e" text-anchor="middle" font-weight="600">'+fmtK(vR)+'</text>';
+    }
+    svg+='<text x="'+cx+'" y="'+(padT+chartH+padB-4)+'" font-size="7" fill="#9eb0ba" text-anchor="middle">'+fmtYM(k)+'</text>';
   });
   svg+='</svg>';
   document.getElementById('bar-chart').innerHTML=svg;
@@ -1478,10 +1542,47 @@ function renderInsights(){
       <span class="tip-tag" style="background:${t.tbg};color:${t.tc};">${t.tag}</span>
     </div>`).join('');
 }
+function calcLucroCessHome(){
+  var total=0, count=0, diasTotal=0;
+  function diasMes(dt){var d=new Date(dt+'T00:00:00');return new Date(d.getFullYear(),d.getMonth()+1,0).getDate();}
+  PROJETOS.forEach(function(p){
+    var fm=p.data.find(function(m){return m.area==='frota';}); if(!fm)return;
+    fm.modelos.forEach(function(mo){
+      var vlr=mo.vlrUnit||0; if(!vlr)return;
+      mo.subgrupos.forEach(function(sg){sg.ativos.forEach(function(a){
+        if(a.dtProg&&a.dtExec&&a.dtExec>a.dtProg){
+          var atraso=Math.round((new Date(a.dtExec+'T00:00:00')-new Date(a.dtProg+'T00:00:00'))/86400000);
+          total+=atraso*(vlr/diasMes(a.dtProg));
+          diasTotal+=atraso; count++;
+        }
+      });});
+    });
+  });
+  return {total:Math.round(total), count, diasMedio:count?Math.round(diasTotal/count):0};
+}
+
 function renderHome(){
   try{renderHomeKPIs();}catch(e){console.error('renderHomeKPIs:',e);}
   try{renderInsights();}catch(e){console.error('renderInsights:',e);}
   try{renderRevenueChart();}catch(e){console.error('renderRevenueChart:',e);}
+  try{
+    var lc=calcLucroCessHome();
+    var el=document.getElementById('home-lucro-cess');
+    if(!el)return;
+    if(lc.total===0){el.style.display='none';return;}
+    el.style.display='block';
+    el.innerHTML='<div style="background:#fef3f2;border:1px solid #fca5a5;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;">'
+      +'<div style="font-size:13px;">🔴</div>'
+      +'<div><div style="font-size:9.5px;font-weight:600;color:#b91c1c;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;">Lucro cessante por atraso de mob.</div>'
+      +'<div style="font-size:9.5px;color:#b91c1c80;">Receita não capturada por mobilizações fora do prazo</div></div>'
+      +'<div style="margin-left:auto;display:flex;gap:20px;align-items:center;flex-wrap:wrap;">'
+      +'<div style="text-align:right;"><div style="font-size:18px;font-weight:700;color:#b91c1c;">'+fmtCur(lc.total)+'</div><div style="font-size:10px;color:#b91c1c80;">total perdido</div></div>'
+      +'<div style="width:1px;height:32px;background:#fca5a5;"></div>'
+      +'<div style="text-align:right;"><div style="font-size:18px;font-weight:700;color:#c2410c;">'+lc.count+'</div><div style="font-size:10px;color:#c2410c80;">ativos com atraso</div></div>'
+      +'<div style="width:1px;height:32px;background:#fca5a5;"></div>'
+      +'<div style="text-align:right;"><div style="font-size:18px;font-weight:700;color:#c2410c;">'+lc.diasMedio+' dias</div><div style="font-size:10px;color:#c2410c80;">atraso médio</div></div>'
+      +'</div></div>';
+  }catch(e){console.error('lucro cess:',e);}
   const and=PROJETOS.filter(p=>!isConc(p));const conc=PROJETOS.filter(p=>isConc(p));
   let rA='';
   if(!and.length)rA=`<tr><td colspan="10" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum projeto em andamento. Clique em "+ Novo projeto" para começar.</td></tr>`;
@@ -1698,20 +1799,28 @@ const iD=(id,f,v,acc)=>`<input type="date" value="${v||''}" style="width:115px;$
 const iT=(id,f,v,ph)=>`<input type="text" value="${v||''}" placeholder="${ph||''}" style="min-width:80px;" onchange="onChange('${id}','${f}',this.value);">`;
 const iN=(id,f,v)=>`<input type="number" min="0" value="${v||''}" placeholder="0" style="width:96px;" onchange="onChange('${id}','${f}',this.value);document.getElementById('dlt-${id}').innerHTML=calcD(window.__fg('${id}').prcOrc,window.__fg('${id}').prcExec);">`;
 function selFilial(id,val){
-  var chg='onChange(\"'+id+'\",\"filial\",this.value)';
-  if(!FILIAIS_LIST.length){
-    var el=document.createElement('input');
-    el.type='text';el.value=val||'';el.placeholder='Filial...';
-    el.style.cssText='min-width:90px;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--white);';
-    el.setAttribute('onchange','onChange("'+id+'","filial",this.value)');
-    return el.outerHTML;
+  // Monta select com todas as filiais do catálogo
+  // Se a filial salva no ativo não estiver na lista, inclui como opção extra
+  var lista = FILIAIS_LIST.slice();
+  if(val && val!=='' && lista.indexOf(val)===-1) lista.unshift(val);
+
+  // Sem lista cadastrada: input texto que preserva o valor
+  if(!lista.length){
+    var inp=document.createElement('input');
+    inp.type='text'; inp.value=val||''; inp.placeholder='Filial...';
+    inp.style.cssText='min-width:90px;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--white);';
+    inp.setAttribute('onchange','onChange("'+id+'","filial",this.value)');
+    return inp.outerHTML;
   }
+
   var el=document.createElement('select');
   el.style.cssText='font-size:10.5px;padding:2px 4px;border-radius:5px;min-width:110px;border:1px solid var(--border);background:var(--white);';
   el.setAttribute('onchange','onChange("'+id+'","filial",this.value)');
-  var blank=document.createElement('option');blank.value='';blank.textContent='—';el.appendChild(blank);
-  FILIAIS_LIST.forEach(function(f){
-    var o=document.createElement('option');o.value=f;o.textContent=f;if(f===val)o.selected=true;el.appendChild(o);
+  var blank=document.createElement('option'); blank.value=''; blank.textContent='—'; el.appendChild(blank);
+  lista.forEach(function(f){
+    var o=document.createElement('option'); o.value=f; o.textContent=f;
+    if(f===val) o.selected=true;
+    el.appendChild(o);
   });
   return el.outerHTML;
 }
