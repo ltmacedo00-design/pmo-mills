@@ -1130,21 +1130,37 @@ function wizCreate(){
       const fm=p.data.find(function(m){return m.area==='frota';});
       if(fm){
         WD.equips.forEach(function(e,i){
-          const mo=fm.modelos[i];
-          if(!mo) return;
-          // Sempre atualiza campos de configuração financeira/logística
+          var mo=fm.modelos[i];
+          if(!mo){
+            // Equipamento NOVO adicionado no wizard — criar modelo do zero
+            if(!e.tipo||!e.modelo||!e.qtd) return; // só cria se mínimo preenchido
+            var novoMo=mkModelo(
+              e.tipo, e.modelo,
+              parseInt(e.qtd)||1,
+              e.mobPrev||p.mob||today(),
+              e.pers?e.persList:[],
+              parseFloat(e.vlrUnit)||0,
+              e.cond||'nova',
+              parseFloat(e.capex)||0
+            );
+            fm.modelos.push(novoMo);
+            return;
+          }
+          // Equipamento EXISTENTE — atualiza só configuração, nunca ativos/datas
           mo.vlrUnit = parseFloat(e.vlrUnit)||mo.vlrUnit||0;
           mo.capex   = parseFloat(e.capex)  ||mo.capex  ||0;
           if(e.mobPrev) mo.mobPrev = e.mobPrev;
           if(e.cond)    mo.cond    = e.cond;
-          // Label/tipo/modelo: só atualiza se preenchidos
-          if(e.tipo)   mo.tipo   = e.tipo;
-          if(e.modelo) mo.modelo = e.modelo;
+          if(e.tipo)    mo.tipo    = e.tipo;
+          if(e.modelo)  mo.modelo  = e.modelo;
           if(e.tipo&&e.modelo) mo.label = e.tipo+' — '+e.modelo;
-          // Personalização do modelo (lista de strings): atualiza direto
-          if(e.persList&&e.persList.length!==undefined) mo.personalizacoes = e.persList;
+          if(e.persList&&Array.isArray(e.persList)) mo.personalizacoes = e.persList;
           // NUNCA toca: mo.subgrupos, ativos, status dos ativos, datas dos ativos
         });
+        // Remover modelos que o usuário excluiu no wizard (WD.equips tem menos itens)
+        if(WD.equips.length < fm.modelos.length){
+          fm.modelos = fm.modelos.slice(0, WD.equips.length);
+        }
       }
       window._wizOriginal = null;
       projParaSalvar = p;
