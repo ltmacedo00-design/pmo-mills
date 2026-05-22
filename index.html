@@ -722,11 +722,15 @@ table.pmo tr:last-child td{border-bottom:none;}
     <div class="htbl-wrap">
       <table class="htbl">
         <thead><tr>
-          <th>Projeto</th><th>Cliente</th><th>Local</th>
-          <th style="text-align:center;">Equip.</th>
-          <th style="text-align:center;">Entregues</th>
-          <th>Progresso</th>
-          <th>CAPEX Total</th>
+          <th style="width:150px;">Projeto</th>
+          <th style="width:115px;">Cliente</th>
+          <th style="width:100px;">Comercial</th>
+          <th style="width:52px;text-align:center;">Prev.</th>
+          <th style="width:60px;text-align:center;">Entregues</th>
+          <th>Pendências por modelo</th>
+          <th style="width:84px;">Mob. prevista</th>
+          <th style="width:90px;">CAPEX total</th>
+          <th style="width:78px;">Progresso</th>
           <th style="width:30px;"></th>
         </tr></thead>
         <tbody id="tbody-rollout"></tbody>
@@ -1246,8 +1250,8 @@ function wizCreate(){
             return;
           }
           // Equipamento EXISTENTE — atualiza só configuração, nunca ativos/datas
-          mo.vlrUnit = parseFloat(e.vlrUnit)||mo.vlrUnit||0;
-          mo.capex   = parseFloat(e.capex)  ||mo.capex  ||0;
+          mo.vlrUnit = isImpl(p)&&(e.vlrUnit!==undefined&&e.vlrUnit!=='')?parseFloat(e.vlrUnit)||0:mo.vlrUnit||0;
+          mo.capex   = (e.capex!==undefined&&e.capex!=='')?parseFloat(e.capex)||0:mo.capex||0;
           if(e.mobPrev) mo.mobPrev = e.mobPrev;
           if(e.cond)    mo.cond    = e.cond;
           if(e.tipo)    mo.tipo    = e.tipo;
@@ -1752,6 +1756,41 @@ function renderHome(){
   else conc.forEach(p=>{rC+=`<tr onclick="openProj('${p.id}')"><td><span class="proj-link">${p.nome}</span></td><td style="color:var(--text-dim);">${p.cliente}</td><td style="color:var(--text-dim);">${p.local}</td><td style="text-align:center;"><span class="badge bg-green">${allAtivos(p.data).length}</span></td><td style="font-size:12px;">${fmtD(p.mob)}</td><td><button onclick="askDel('${p.id}','${p.nome.replace(/'/g,"\\'")}',event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px;" title="Excluir">🗑</button></td></tr>`;
   rA+="";});
   document.getElementById('tbody-impl').innerHTML=rC;
+  // Tabela Rollout
+  const tbR=document.getElementById('tbody-rollout');
+  if(tbR){
+    if(!rolloutP.length){
+      tbR.innerHTML='<tr><td colspan="10" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum rollout cadastrado.</td></tr>';
+    } else {
+      let rR='';
+      rolloutP.forEach(function(p,pi){
+        const ats=allAtivos(p.data);
+        const tot=ats.length,ent=ats.filter(function(a){return a.status==='sf-ent';}).length;
+        const capex=(p.data||[]).filter(function(m){return m.area==='frota';}).flatMap(function(m){return m.modelos||[];}).reduce(function(s,mo){return s+(parseInt(mo.qtd)||0)*(parseFloat(mo.capex)||0);},0);
+        const pct=tot?Math.round(ent/tot*100):0;
+        const fm=p.data.find(function(m){return m.area==='frota';});
+        const pends=(fm?fm.modelos:[]).map(function(mo){const sg=mo.subgrupos&&mo.subgrupos[0];const pN=sg?sg.ativos.filter(function(a){return a.status!=='sf-ent';}).length:0;return pN>0?mo.modelo+': '+pN+'un.':'';}).filter(Boolean).join(' · ');
+        const mobPrev=(fm?fm.modelos:[]).map(function(mo){return mo.mobPrev||'';}).filter(Boolean).sort()[0]||p.mob||'';
+        const clr=PROJ_COLORS[pi%PROJ_COLORS.length];
+        rR+='<tr data-pid="'+p.id+'" onclick="openProj(this.dataset.pid)" style="cursor:pointer;">'
+          +'<td><span style="color:'+clr+';font-weight:500;">🔄 '+p.nome+'</span></td>'
+          +'<td style="color:var(--text-dim);">'+(p.cliente||'—')+'</td>'
+          +'<td style="color:var(--text-dim);">'+(p.comercial||'—')+'</td>'
+          +'<td style="text-align:center;font-weight:600;">'+tot+'</td>'
+          +'<td style="text-align:center;"><span class="badge '+(ent===tot?'bg-green':ent>0?'bg-blue':'bg-gray')+'">'+ent+'</span></td>'
+          +'<td style="font-size:11px;color:var(--text-dim);">'+(pends||'—')+'</td>'
+          +'<td style="font-size:12px;">'+(mobPrev?fmtD(mobPrev):'—')+'</td>'
+          +'<td style="font-size:11.5px;font-weight:500;color:#5340a8;">'+(capex?fmtCur(capex):'—')+'</td>'
+          +'<td><div style="display:flex;align-items:center;gap:5px;"><div class="prog-bar"><div class="prog-fill '+(pct===100?'full':'')+'" style="width:'+pct+'%"></div></div><span style="font-size:10px;color:var(--text-muted);width:24px;">'+pct+'%</span></div></td>'
+          +'<td style="white-space:nowrap;" data-eid="'+p.id+'" data-enome="'+p.nome.replace(/['"]/g,'')+'">'
+          +'<button onclick="openEditWiz(this.parentNode.dataset.eid,event)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:12px;padding:2px 3px;" title="Editar">✏️</button>'
+          +'<button onclick="askDel(this.parentNode.dataset.eid,this.parentNode.dataset.enome,event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px;" title="Excluir">🗑</button>'
+          +'</td>'
+          +'</tr>';
+      });
+      tbR.innerHTML=rR;
+    }
+  }
 }
 function renderSidebar(){
   const and=PROJETOS.filter(p=>!isConc(p));const conc=PROJETOS.filter(p=>isConc(p));
