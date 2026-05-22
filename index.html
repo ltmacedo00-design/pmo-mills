@@ -651,7 +651,7 @@ table.pmo tr:last-child td{border-bottom:none;}
     </div>
     <div class="main-header-right">
       <span class="main-header-date" id="topbar-date"></span>
-      <button class="btn-accent" onclick="openWiz()">+ Novo projeto</button>
+      <button class="btn-accent" onclick="openWiz()">+ Implantação</button>&nbsp;<button class="btn-accent" onclick="openWizRollout()" style="background:#5340a8;">🔄 Novo Rollout</button>
       <div class="fb-badge" id="fb-status">
         <div class="fb-badge-dot" id="fb-dot"></div>
         <span id="fb-txt">Conectando...</span>
@@ -714,6 +714,22 @@ table.pmo tr:last-child td{border-bottom:none;}
       <table class="htbl">
         <thead><tr><th>Projeto</th><th>Cliente</th><th>Local</th><th style="text-align:center;">Equip.</th><th style="width:86px;">Mob.</th><th style="width:30px;"></th></tr></thead>
         <tbody id="tbody-impl"></tbody>
+      </table>
+    </div>
+
+    <!-- Rollout em andamento -->
+    <div class="home-sec" style="margin-top:14px;">🔄 Rollout</div>
+    <div class="htbl-wrap">
+      <table class="htbl">
+        <thead><tr>
+          <th>Projeto</th><th>Cliente</th><th>Local</th>
+          <th style="text-align:center;">Equip.</th>
+          <th style="text-align:center;">Entregues</th>
+          <th>Progresso</th>
+          <th>CAPEX Total</th>
+          <th style="width:30px;"></th>
+        </tr></thead>
+        <tbody id="tbody-rollout"></tbody>
       </table>
     </div>
 
@@ -1085,7 +1101,9 @@ function mkModelo(tipo,modelo,qtd,mobPrev,pers,vlrUnit,cond,capex){
 }
 
 // ── WIZARD ─────────────────────────────────
-const WIZ_STEPS=['Identificação','Frota','Mão de obra','Apoio','Documentação','Revisão'];
+const WIZ_STEPS        =['Identificação','Frota','Mão de obra','Apoio','Documentação','Revisão'];
+const WIZ_STEPS_ROLLOUT=['Identificação','Equipamentos (CAPEX)','Documentação','Revisão'];
+var wizMode='impl'; // 'impl' | 'rollout'
 var wizStep=0;var WD={};
 function wizAddCargo(sel){
   var v=sel.value;
@@ -1098,7 +1116,18 @@ function wdReset(){WD={nome:'',cliente:'',local:'',contrato:'',mob:'',comercial:
   veiculo:null,veiculoTipo:'',veiculoQtd:1,container:null,containerObs:'',outros:'',
   docs:[{nome:'',prazo:''}]};}
 wdReset();
-function openWiz(){wdReset();wizStep=0;document.getElementById('ov-wiz').classList.add('open');renderWiz();}
+function openWiz(){
+  wizMode='impl';
+  wdReset();wizStep=0;
+  document.getElementById('ov-wiz').classList.add('open');
+  renderWiz();
+}
+function openWizRollout(){
+  wizMode='rollout';
+  wdReset();wizStep=0;
+  document.getElementById('ov-wiz').classList.add('open');
+  renderWiz();
+}
 function closeWiz(){document.getElementById('ov-wiz').classList.remove('open');}
 function wizSave(){
   // Coleta campos de QUALQUER step que estiver visível
@@ -1120,8 +1149,66 @@ function wizSave(){
     else WD.equips[i][f]=el.value;
   });
 }
-function wizNext(){wizSave();if(wizStep===WIZ_STEPS.length-1){wizCreate();return;}wizStep++;renderWiz();}
+function wizNext(){wizSave();if(wizStep===activeSteps().length-1){wizCreate();return;}wizStep++;renderWiz();}
 function wizPrev(){if(wizStep>0){wizSave();wizStep--;renderWiz();}}
+// ──────────────────────────────────────────────────────────────
+// ROLLOUT WIZARD STEPS
+// ──────────────────────────────────────────────────────────────
+function renderWizStep0(cont){
+  // Step 0 compartilhado: nome, cliente, local, contrato, mob
+  cont.innerHTML=
+    '<div class="wrow wrow-2"><div><label class="wlabel">Nome do projeto</label><input class="winput" id="w-nome" value="'+(WD.nome||'')+'" placeholder="Ex: Vale — Rollout 2025"></div>'
+    +'<div><label class="wlabel">Contrato</label><input class="winput" id="w-contrato" value="'+(WD.contrato||'')+'" placeholder="CT-2025-001"></div></div>'
+    +'<div class="wrow wrow-3"><div><label class="wlabel">Cliente</label><input class="winput" id="w-cliente" value="'+(WD.cliente||'')+'" placeholder="Nome do cliente"></div>'
+    +'<div><label class="wlabel">Local</label><input class="winput" id="w-local" value="'+(WD.local||'')+'" placeholder="Cidade / Estado"></div>'
+    +'<div><label class="wlabel">Comercial</label><input class="winput" id="w-comercial" value="'+(WD.comercial||'')+'" placeholder="Nome do responsável comercial"></div></div>'
+    +'<div class="wrow wrow-2"><div><label class="wlabel">Previsão de início</label><input class="winput" type="date" id="w-mob" value="'+(WD.mob||'')+'"></div></div>';
+}
+
+
+
+function renderWizStepDocs(cont){
+  // Reutiliza o step de docs (step 4) da implantação
+  // Renderizado via renderWiz internamente quando wizStep===4 no modo implantação
+  // Para rollout chamamos diretamente o mesmo HTML
+  var docs=WD.docs||[];
+  var html='<div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;">Informe os documentos necessários para o rollout.</div>';
+  html+='<div id="docs-list">';
+  if(!docs.length){
+    html+='<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center;background:var(--surface2);border-radius:7px;">Nenhum documento adicionado. Clique em "+ Adicionar" abaixo.</div>';
+  }
+  docs.forEach(function(d,i){
+    html+='<div style="display:grid;grid-template-columns:1fr 140px auto;gap:8px;align-items:end;margin-bottom:8px;">';
+    html+='<div><label class="wlabel">Documento</label><input class="winput" value="'+(d.nome||'')+'" placeholder="Ex: ART, PPRA, PCMSO..." onchange="WD.docs['+i+'].nome=this.value"></div>';
+    html+='<div><label class="wlabel">Prazo</label><input class="winput" type="date" value="'+(d.prazo||'')+'" onchange="WD.docs['+i+'].prazo=this.value"></div>';
+    html+='<button onclick="WD.docs.splice('+i+',1);renderWiz()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;margin-bottom:2px;">×</button>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<button onclick="rqAddDoc()" style="background:none;border:1px dashed var(--border);color:var(--text-muted);border-radius:7px;padding:8px 16px;cursor:pointer;width:100%;font-size:12px;margin-top:4px;">+ Adicionar documento</button>';
+  cont.innerHTML=html;
+}
+
+function renderWizStepRevisaoRollout(cont){
+  var tot=WD.equips.reduce(function(s,e){return s+(parseInt(e.qtd)||0);},0);
+  var capex=WD.equips.filter(function(e){return e.cond==='nova';}).reduce(function(s,e){return s+(parseInt(e.qtd)||1)*(parseFloat(e.capex)||0);},0);
+  var rows=WD.equips.map(function(e){
+    return '<tr><td style="padding:5px 8px;">'+e.tipo+' '+e.modelo+'</td><td style="padding:5px 8px;text-align:center;">'+( e.qtd||1)+'</td><td style="padding:5px 8px;text-align:center;">'+(e.cond||'nova')+'</td><td style="padding:5px 8px;text-align:right;color:var(--accent);">'+(e.cond==='nova'&&e.capex?fmtCur((parseInt(e.qtd)||1)*(parseFloat(e.capex)||0)):'—')+'</td></tr>';
+  }).join('');
+  cont.innerHTML='<div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
+    +'<div><div style="font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Projeto</div><div style="font-size:14px;font-weight:600;">'+WD.nome+'</div></div>'
+    +'<div><div style="font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Cliente</div><div style="font-size:13px;">'+(WD.cliente||'—')+'</div></div>'
+    +'<div><div style="font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Local</div><div style="font-size:13px;">'+(WD.local||'—')+'</div></div>'
+    +'</div>'
+    +'<div style="background:var(--surface2);border-radius:8px;padding:14px;display:flex;gap:24px;margin-bottom:12px;">'
+    +'<div><div style="font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Equipamentos</div><div style="font-size:22px;font-weight:700;color:var(--accent);">'+tot+'</div></div>'
+    +'<div><div style="font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">CAPEX Total (novos)</div><div style="font-size:22px;font-weight:700;color:#5340a8;">'+(capex?fmtCur(capex):'—')+'</div></div>'
+    +'</div>'
+    +'<table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:7px;overflow:hidden;font-size:12px;">'
+    +'<thead><tr style="background:var(--surface2);"><th style="padding:6px 8px;text-align:left;">Equipamento</th><th style="padding:6px 8px;text-align:center;">Qtd</th><th style="padding:6px 8px;text-align:center;">Condição</th><th style="padding:6px 8px;text-align:right;">CAPEX</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>';
+}
+
 function wizCreate(){
   var projParaSalvar = null;
   if(window._editProjId){
@@ -1180,7 +1267,7 @@ function wizCreate(){
     window._editProjId=null;
   } else {
     // Novo projeto: cria, empurra, e guarda referência direta
-    var novoProj={id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),nome:WD.nome||'Novo projeto',cliente:WD.cliente||'—',local:WD.local||'—',mob:WD.mob||today(),comercial:WD.comercial||'',contrato:WD.contrato||'',data:buildData()};
+    var novoProj={id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),nome:WD.nome||'Novo projeto',cliente:WD.cliente||'—',local:WD.local||'—',mob:WD.mob||today(),comercial:WD.comercial||'',contrato:WD.contrato||'',tipo:wizMode==='rollout'?'rollout':'implantacao',data:wizMode==='rollout'?buildDataRollout():buildData()};
     PROJETOS.push(novoProj);
     projParaSalvar = novoProj; // referência direta, sem find posterior
     window._editProjId=null;
@@ -1199,6 +1286,22 @@ function wizCreate(){
   // Salvar no Firebase
   if(projParaSalvar) dbSalvarProjeto(projParaSalvar);
 }
+function buildDataRollout(){
+  // Estrutura igual ao buildData mas só frota + docs
+  // Sem RH, apoio, logística
+  const mob=WD.mob||today();
+  const modelos=WD.equips.filter(function(e){return e.tipo&&e.modelo&&e.qtd>0;}).map(function(e){
+    return mkModelo(e.tipo,e.modelo,parseInt(e.qtd)||1,e.mobPrev||mob,[],0,e.cond||'nova',parseFloat(e.capex)||0);
+  });
+  const frota={id:nid(),_macro:true,area:'frota',label:'🔄 Frota Rollout',modelos};
+  const docs={id:nid(),_macro:true,area:'docs',label:'📄 Documentação',children:
+    (WD.docs||[]).filter(function(d){return d.nome;}).map(function(d){
+      return mkNode(d.nome,{dtPrev:d.prazo||addDays(mob,-7)});
+    })
+  };
+  return [frota,docs];
+}
+
 function buildData(){
   const base=WD.mob||today();const data=[];
   const fm={id:nid(),_macro:true,area:'frota',label:'Frota',icon:'⚙',modelos:[]};expState[fm.id]=true;
@@ -1257,10 +1360,59 @@ function wizModeloHtml(i,e){
     +'onchange="WD.equips['+i+'].modelo=this.value">';
 }
 
-function renderWizBar(){document.getElementById('wiz-bar').innerHTML=WIZ_STEPS.map((s,i)=>`<div class="si ${i<wizStep?'done':''} ${i===wizStep?'active':''}"><div class="si-c">${i<wizStep?'✓':i+1}</div><div class="si-l">${s}</div></div>`).join('');document.getElementById('wiz-back').style.visibility=wizStep===0?'hidden':'visible';document.getElementById('wiz-next-lbl').textContent=wizStep===WIZ_STEPS.length-1?'Gerar PMO ✓':'Próximo →';}
+function activeSteps(){return wizMode==='rollout'?WIZ_STEPS_ROLLOUT:WIZ_STEPS;}
+function renderWizBar(){
+  const steps=activeSteps();
+  document.getElementById('wiz-bar').innerHTML=steps.map((s,i)=>`<div class="si ${i<wizStep?'done':''} ${i===wizStep?'active':''}"><div class="si-c">${i<wizStep?'✓':i+1}</div><div class="si-l">${s}</div></div>`).join('');
+  document.getElementById('wiz-back').style.visibility=wizStep===0?'hidden':'visible';
+  const last=wizMode==='rollout'?'Gerar Rollout ✓':'Gerar PMO ✓';
+  document.getElementById('wiz-next-lbl').textContent=wizStep===steps.length-1?last:'Próximo →';
+}
 
 function renderWiz(){
   renderWizBar();const c=document.getElementById('wiz-content');
+  // ROLLOUT: usa os mesmos steps de implantação, só pula MO (2) e Apoio (3)
+  if(wizMode==='rollout'){
+    if(wizStep===0){
+      // Step 0: Identificação — idêntico ao de implantação
+      c.innerHTML=`<div class="wbox">
+        <div class="wr"><div><label class="wlabel">Nome do projeto</label><input class="winput" id="w-nome" value="${WD.nome}" placeholder="Ex: Mineração Norte — Rollout"></div><div><label class="wlabel">Cliente</label><input class="winput" id="w-cliente" value="${WD.cliente}" placeholder="Razão social"></div></div>
+        <div class="wr"><div><label class="wlabel">Local / Obra</label><input class="winput" id="w-local" value="${WD.local}" placeholder="Cidade — UF"></div><div><label class="wlabel">Nº contrato</label><input class="winput" id="w-contrato" value="${WD.contrato}" placeholder="00000-0"></div></div>
+        <div class="wr"><div><label class="wlabel">Data prevista de mobilização</label><input class="winput" type="date" id="w-mob" value="${WD.mob}"></div><div><label class="wlabel">Comercial responsável</label><input class="winput" id="w-comercial" value="${WD.comercial}" placeholder="Nome do comercial"></div></div>
+      </div>`;
+    } else if(wizStep===1){
+      // Step 1: Frota — igual ao de implantação MAS sem campo Vlr. unit. loc.
+      const eqs=WD.equips.map((e,i)=>{return`<div class="eq-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:600;">Equipamento ${i+1}</span>
+          ${WD.equips.length>1?`<button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;" onclick="WD.equips.splice(${i},1);renderWiz()">×</button>`:''}
+        </div>
+        <div class="wr"><div><label class="wlabel">Tipo</label>${wizTipoHtml(i,e)}</div><div><label class="wlabel">Modelo</label>${wizModeloHtml(i,e)}</div></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px;">
+          <div><label class="wlabel">Condição</label><select class="winput" onchange="WD.equips[${i}].cond=this.value"><option value="nova"${e.cond==='nova'?' selected':''}>Nova</option><option value="usada"${e.cond==='usada'?' selected':''}>Usada</option><option value="capex"${e.cond==='capex'?' selected':''}>CAPEX</option></select></div>
+          <div><label class="wlabel">Quantidade</label><input class="winput" type="number" min="1" value="${e.qtd}" onchange="WD.equips[${i}].qtd=+this.value" data-equip-idx="${i}" data-equip-field="qtd"></div>
+          <div><label class="wlabel">Vlr. CAPEX (R$)</label><input class="winput" type="number" min="0" value="${e.capex||''}" placeholder="0,00" onchange="WD.equips[${i}].capex=+this.value" data-equip-idx="${i}" data-equip-field="capex"></div>
+        </div>
+        <div class="wr" style="margin-top:6px;"><div><label class="wlabel">Prev. mob.</label><input class="winput" type="date" value="${e.mobPrev}" onchange="WD.equips[${i}].mobPrev=this.value" data-equip-idx="${i}" data-equip-field="mobPrev"></div><div></div></div>
+        <div style="margin-top:6px;"><label class="wlabel">Personalização?</label>
+          <div style="display:flex;gap:7px;margin-bottom:5px;"><button class="yn yes${e.pers===true?' on':''}" onclick="WD.equips[${i}].pers=true;renderWiz()">Sim</button><button class="yn no${e.pers===false?' on':''}" onclick="WD.equips[${i}].pers=false;renderWiz()">Não</button></div>
+          ${e.pers===true?`<div style="background:var(--surface2);border-radius:6px;padding:8px;"><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px;">${e.persList.map((p,pi)=>`<span class="tag-chip">${p}<span onclick="WD.equips[${i}].persList.splice(${pi},1);renderWiz()" style="cursor:pointer;"> ×</span></span>`).join('')}</div><select class="winput" style="margin-bottom:5px;" onchange="if(this.value&&!WD.equips[${i}].persList.includes(this.value)){WD.equips[${i}].persList.push(this.value);renderWiz();}this.value=''"><option value="">+ Da lista padrão...</option>${PERS_BASE.filter(p=>!e.persList.includes(p)).map(p=>`<option value="${p}">${p}</option>`).join('')}</select><div style="display:flex;gap:5px;"><input class="winput" id="np${i}" placeholder="Personalização livre..." style="margin-bottom:0;flex:1;"><button onclick="const v=document.getElementById('np${i}').value.trim();if(v&&!WD.equips[${i}].persList.includes(v)){WD.equips[${i}].persList.push(v);renderWiz();}" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:0 10px;font-size:11px;cursor:pointer;">Add</button></div></div>`:''}
+        </div></div>`;}).join('');
+      c.innerHTML=`<div class="wbox">${eqs}<button onclick="WD.equips.push({tipo:'',modelo:'',cond:'nova',qtd:1,vlrUnit:0,capex:0,mobPrev:'',pers:false,persList:[]});renderWiz()" style="background:none;border:1px dashed var(--border);border-radius:6px;width:100%;padding:7px;font-size:11.5px;color:var(--text-dim);cursor:pointer;margin-top:4px;">+ Adicionar equipamento</button></div>`;
+    } else if(wizStep===2){
+      // Step 2: Documentação — idêntico ao step 4 de implantação
+      const dr=WD.docs.map((d,i)=>`<div style="display:grid;grid-template-columns:1fr 135px 24px;gap:6px;margin-bottom:5px;align-items:center;"><input class="winput" style="margin-bottom:0;" value="${d.nome}" placeholder="Nome do documento..." onchange="WD.docs[${i}].nome=this.value"><input class="winput" type="date" style="margin-bottom:0;" value="${d.prazo}" onchange="WD.docs[${i}].prazo=this.value">${WD.docs.length>1?`<button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;" onclick="WD.docs.splice(${i},1);renderWiz()">×</button>`:'<span></span>'}</div>`).join('');
+      c.innerHTML=`<div class="wbox"><div class="info-box">Liste os documentos exigidos com prazo máximo de entrega.</div><div style="display:grid;grid-template-columns:1fr 135px 24px;gap:6px;font-size:10px;color:var(--text-muted);margin-bottom:5px;"><span>Documento</span><span>Prazo máximo</span><span></span></div>${dr}<button onclick="WD.docs.push({nome:'',prazo:''});renderWiz()" style="background:none;border:1px dashed var(--border);border-radius:6px;width:100%;padding:6px;font-size:11px;color:var(--text-dim);cursor:pointer;margin-top:3px;">+ Adicionar documento</button></div>`;
+    } else {
+      // Step 3: Revisão — igual ao de implantação mas sem MO/Veículo/Container
+      const capexTotal=WD.equips.reduce((s,e)=>s+((+e.capex||0)*(+e.qtd||1)),0);
+      const te=WD.equips.reduce((s,e)=>s+(+e.qtd||1),0);
+      c.innerHTML=`<div class="wbox"><div class="wr" style="margin-bottom:12px;"><div style="background:var(--white);border-radius:7px;padding:10px 12px;border:1px solid var(--border-soft);"><div class="kpi-s-lbl">CAPEX total</div><div style="font-size:18px;font-weight:600;color:#5340a8;">${fmtCur(capexTotal)}</div></div><div style="background:var(--white);border-radius:7px;padding:10px 12px;border:1px solid var(--border-soft);"><div class="kpi-s-lbl">Total equipamentos</div><div style="font-size:18px;font-weight:600;">${te}</div></div></div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">${[['Projeto',WD.nome||'—'],['Cliente',WD.cliente||'—'],['Local',WD.local||'—'],['Comercial',WD.comercial||'—'],['Mob. prevista',WD.mob?fmtD(WD.mob):'—'],['Documentos',WD.docs.filter(d=>d.nome).length+' cadastrado(s)']].map(([k,v])=>`<tr style="border-bottom:1px solid var(--border-soft);"><td style="padding:5px 0;color:var(--text-dim);">${k}</td><td style="text-align:right;font-weight:500;">${v}</td></tr>`).join('')}</table></div>`;
+    }
+    return;
+  }
+  // IMPLANTAÇÃO: steps originais
   if(wizStep===0){
     c.innerHTML=`<div class="wbox">
       <div class="wr"><div><label class="wlabel">Nome do projeto</label><input class="winput" id="w-nome" value="${WD.nome}" placeholder="Ex: Mineração Norte"></div><div><label class="wlabel">Cliente</label><input class="winput" id="w-cliente" value="${WD.cliente}" placeholder="Razão social"></div></div>
@@ -1390,6 +1542,8 @@ Object.defineProperty(window,'_saveTimer',{
   set: function(v){ if(currentProjId){ if(v===null){ delete _saveTimers[currentProjId]; } else { _saveTimers[currentProjId]=v; } } }
 });
 function isConc(p){const a=allAtivos(p.data);return a.length>0&&a.every(x=>x.status==='sf-ent');}
+function isRollout(p){return p.tipo==='rollout';}
+function isImpl(p){return !isRollout(p);}
 function fatMes(p){const fm=p.data.find(m=>m.area==='frota');if(!fm)return 0;return fm.modelos.reduce((s,mo)=>{const qtd=mo.subgrupos&&mo.subgrupos[0]?mo.subgrupos[0].ativos.length:(mo.qtd||0);return s+(mo.vlrUnit||0)*qtd;},0);}
 function pendRes(p){const fm=p.data.find(m=>m.area==='frota');if(!fm||!fm.modelos)return '—';const r=[];fm.modelos.forEach(mo=>{let pend=0,ds=[];mo.subgrupos.forEach(sg=>sg.ativos.forEach(a=>{if(a.status!=='sf-ent'){pend++;const d=a.dtReprog||a.dtProg;if(d)ds.push(d);}}));if(pend>0){const d=ds.sort()[0];r.push(`${(mo.label.split('—')[1]||mo.label).trim()}: ${pend}un.${d?' ('+fmtD(d)+')':''}`);}});return r.length?r.join(' · '):'Tudo entregue';}
 
@@ -1401,7 +1555,7 @@ function buildRevenueData(){
   function diaMes(dt){return new Date(dt+'T00:00:00').getDate();}
   function fatProp(vlr,dt){const tot=diasMes(dt);return Math.round(vlr*(tot-diaMes(dt)+1)/tot);}
 
-  PROJETOS.filter(p=>!isConc(p)).forEach(p=>{
+  PROJETOS.filter(p=>isImpl(p)&&!isConc(p)).forEach(p=>{
     const fm=p.data.find(m=>m.area==='frota');if(!fm)return;
     fm.modelos.forEach(mo=>{
       const vlr=mo.vlrUnit||0;if(!vlr)return;
@@ -1413,11 +1567,12 @@ function buildRevenueData(){
           mapCapa[ym]=(mapCapa[ym]||0)+vlr;              // capa: mensal cheio
           mapProp[ym]=(mapProp[ym]||0)+fatProp(vlr,dtP); // proporcional
         }
-        // data executada
-        if(a.dtExec){
-          const ym=a.dtExec.slice(0,7);
+        // data executada — se não preenchida mas status entregue, usa dtProg||dtPrev
+        const dtExecR=a.dtExec||(a.status==='sf-ent'?a.dtProg||a.dtPrev:'');
+        if(dtExecR){
+          const ym=dtExecR.slice(0,7);
           mapReal[ym]=(mapReal[ym]||0)+vlr;
-          mapRealProp[ym]=(mapRealProp[ym]||0)+fatProp(vlr,a.dtExec);
+          mapRealProp[ym]=(mapRealProp[ym]||0)+fatProp(vlr,dtExecR);
         }
       }));
     });
@@ -1500,7 +1655,7 @@ function renderHomeKPIs(){
   const all_ats=PROJETOS.flatMap(p=>allAtivos(p.data));
   const total=all_ats.length,ent=all_ats.filter(a=>a.status==='sf-ent').length;
   const td=today();const atras=all_ats.filter(a=>a.status!=='sf-ent'&&a.dtPrev&&a.dtPrev<td).length;
-  const andP=PROJETOS.filter(p=>!isConc(p));
+  const andP=PROJETOS.filter(p=>isImpl(p)&&!isConc(p));
   const fat=andP.reduce((s,p)=>s+fatMes(p),0);
   const tran=all_ats.filter(a=>a.status==='sf-tran').length;
   const kpi=(icon,iconBg,lbl,val,valColor,sub)=>
@@ -1513,7 +1668,7 @@ function renderHomeKPIs(){
       </div>
     </div>`;
   document.getElementById('home-kpis').innerHTML=
-    kpi('👥','#dbeafe','Projetos em andamento',andP.length,'',PROJETOS.filter(p=>isConc(p)).length+' implantados')+
+    kpi('👥','#dbeafe','Projetos em andamento',andP.length,'',PROJETOS.filter(p=>isImpl(p)&&isConc(p)).length+' implantados')+
     kpi('📦','#dcfce7','Ativos prev. para mob.',total,'',ent+' entregues · '+(total?Math.round(ent/total*100):0)+'%')+
     kpi('⏰','#fee2e2','Em atraso',atras,atras>0?'var(--red)':'var(--green)',atras>0?'Atenção necessária':'Dentro do prazo')+
     kpi('🚛','#e0f2fe','Em trânsito',tran,'var(--blue)','Aguardando check-in')+
@@ -1545,7 +1700,7 @@ function renderInsights(){
 function calcLucroCessHome(){
   var total=0, count=0, diasTotal=0;
   function diasMes(dt){var d=new Date(dt+'T00:00:00');return new Date(d.getFullYear(),d.getMonth()+1,0).getDate();}
-  PROJETOS.forEach(function(p){
+  PROJETOS.filter(function(p){return isImpl(p);}).forEach(function(p){
     var fm=p.data.find(function(m){return m.area==='frota';}); if(!fm)return;
     fm.modelos.forEach(function(mo){
       var vlr=mo.vlrUnit||0; if(!vlr)return;
@@ -1586,7 +1741,7 @@ function renderHome(){
       +'<div style="text-align:right;"><div style="font-size:18px;font-weight:700;color:#c2410c;">'+lc.diasMedio+' dias</div><div style="font-size:10px;color:#c2410c80;">atraso médio</div></div>'
       +'</div></div>';
   }catch(e){console.error('lucro cess:',e);}
-  const and=PROJETOS.filter(p=>!isConc(p));const conc=PROJETOS.filter(p=>isConc(p));
+  const and=PROJETOS.filter(p=>isImpl(p)&&!isConc(p));const conc=PROJETOS.filter(p=>isImpl(p)&&isConc(p));const rolloutP=PROJETOS.filter(p=>isRollout(p));
   let rA='';
   if(!and.length)rA=`<tr><td colspan="10" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum projeto em andamento. Clique em "+ Novo projeto" para começar.</td></tr>`;
   else and.forEach(p=>{const ats=allAtivos(p.data);const tot=ats.length,ent=ats.filter(a=>a.status==='sf-ent').length;const pct=tot?Math.round(ent/tot*100):0;const fat=fatMes(p);rA+=`<tr onclick="openProj('${p.id}')" style="cursor:pointer;"><td><span class="proj-link">${p.nome}</span></td><td style="color:var(--text-dim);">${p.cliente}</td><td style="color:var(--text-dim);">${p.comercial||'—'}</td><td style="text-align:center;font-weight:600;">${tot}</td><td style="text-align:center;"><span class="badge ${ent===tot?'bg-green':ent>0?'bg-blue':'bg-gray'}">${ent}</span></td><td style="font-size:11px;color:var(--text-dim);">${pendRes(p)}</td><td style="font-size:12px;">${fmtD(p.mob)}</td><td style="font-size:11.5px;font-weight:500;color:var(--accent);">${fat>0?fmtCur(fat):'—'}</td><td><div style="display:flex;align-items:center;gap:5px;"><div class="prog-bar"><div class="prog-fill ${pct===100?'full':''}" style="width:${pct}%"></div></div><span style="font-size:10px;color:var(--text-muted);width:24px;">${pct}%</span></div></td><td style="white-space:nowrap;"><button onclick="openEditWiz('${p.id}',event)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:12px;padding:2px 3px;" title="Editar projeto">✏️</button><button onclick="askDel('${p.id}','${p.nome.replace(/'/g,"\\'")}',event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px;" title="Excluir">🗑</button></td></tr>`;
@@ -2239,7 +2394,7 @@ function vcProjFilter(){
 function vcProjs(){
   const sel=msGet('ms-vc');
   const projFil=typeof vcProjFilter==='function'?vcProjFilter():'';
-  let ps=PROJETOS;
+  let ps=PROJETOS.filter(p=>isImpl(p));
   if(sel.size)ps=ps.filter(p=>p.comercial&&sel.has(p.comercial));
   if(projFil)ps=ps.filter(p=>p.id===projFil);
   return ps;
@@ -2344,8 +2499,10 @@ function renderComercial(){
           mapCapaPrev[ym]=(mapCapaPrev[ym]||0)+vlr;
         }
         // ── CAPA DE CONTRATO REALIZADA ─────────────────────────
-        if(a.dtExec){
-          const ym=a.dtExec.slice(0,7);
+        // Usa dtExec se preenchida; se não, usa dtProg||dtPrev quando entregue
+        const dtExecCapa=a.dtExec||(a.status==='sf-ent'?a.dtProg||a.dtPrev:'');
+        if(dtExecCapa){
+          const ym=dtExecCapa.slice(0,7);
           mapCapaReal[ym]=(mapCapaReal[ym]||0)+vlr;
         }
         // ── FATURAMENTO PROPORCIONAL PREVISTO ──────────────────
@@ -2357,10 +2514,11 @@ function renderComercial(){
           mapPropPrev[ym]=(mapPropPrev[ym]||0)+prop;
         }
         // ── FATURAMENTO PROPORCIONAL REALIZADO ─────────────────
-        // Data executada → proporcional do mês
-        if(a.dtExec){
-          const prop=fatProporcional(vlr,a.dtExec);
-          const ym=a.dtExec.slice(0,7);
+        // Usa dtExec se preenchida; se não, usa dtProg||dtPrev quando entregue
+        const dtExecProp=a.dtExec||(a.status==='sf-ent'?a.dtProg||a.dtPrev:'');
+        if(dtExecProp){
+          const prop=fatProporcional(vlr,dtExecProp);
+          const ym=dtExecProp.slice(0,7);
           mapPropReal[ym]=(mapPropReal[ym]||0)+prop;
         }
         // ── LUCRO CESSANTE ─────────────────────────────────────
