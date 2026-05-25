@@ -1105,7 +1105,7 @@ function setNtab(i){
   if(i===1){populateKanFilters();renderKanban();}
   if(i===2){populateComercialFilter();renderComercial();}
   if(i===3){renderAdmin();}
-  if(i===4){renderImplProg();}
+  if(i===4){try{renderImplProg();}catch(e){console.error('renderImplProg ERRO:',e);document.getElementById('impl-prog-board').innerHTML='<div style="color:red;padding:20px;">Erro: '+e.message+'</div>';}}
   if(i===0){renderHome();}
 }
 
@@ -3031,7 +3031,7 @@ function renderImplProg(){
             dtOrig:dtOrig,reprog:!!dtReprog,
             entregue:a.status==='sf-ent',filial:a.filial||''});
           if(a.dtExec||a.status==='sf-ent'){
-            var dtE=a.dtExec||dtRef,de=new Date(dtE+'T00:00:00'),dowe=de.getDay()||7,sege=new Date(de);
+            var dtE=a.dtExec||dtOrig,de=new Date(dtE+'T00:00:00'),dowe=de.getDay()||7,sege=new Date(de);
             sege.setDate(de.getDate()-(dowe-1));semReal[sege.toISOString().slice(0,10)]=(semReal[sege.toISOString().slice(0,10)]||0)+1;
           }
         });
