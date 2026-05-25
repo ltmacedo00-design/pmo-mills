@@ -1260,7 +1260,7 @@ function wizCreate(){
             var novoMo=mkModelo(
               e.tipo, e.modelo,
               parseInt(e.qtd)||1,
-              e.mobPrev||p.mob||today(),
+              e.mobPrev||'',
               e.pers?e.persList:[],
               parseFloat(e.vlrUnit)||0,
               e.cond||'nova',
@@ -1272,7 +1272,7 @@ function wizCreate(){
           // Equipamento EXISTENTE — atualiza só configuração, nunca ativos/datas
           mo.vlrUnit = isImpl(p)&&(e.vlrUnit!==undefined&&e.vlrUnit!=='')?parseFloat(e.vlrUnit)||0:mo.vlrUnit||0;
           mo.capex   = (e.capex!==undefined&&e.capex!=='')?parseFloat(e.capex)||0:mo.capex||0;
-          if(e.mobPrev) mo.mobPrev = e.mobPrev;
+          mo.mobPrev = e.mobPrev; // atualiza mesmo se vazio (usuário apagou)
           if(e.cond)    mo.cond    = e.cond;
           if(e.tipo)    mo.tipo    = e.tipo;
           if(e.modelo)  mo.modelo  = e.modelo;
@@ -1315,7 +1315,7 @@ function buildDataRollout(){
   // Sem RH, apoio, logística
   const mob=WD.mob||today();
   const modelos=WD.equips.filter(function(e){return e.tipo&&e.modelo&&e.qtd>0;}).map(function(e){
-    return mkModelo(e.tipo,e.modelo,parseInt(e.qtd)||1,e.mobPrev||mob,[],0,e.cond||'nova',parseFloat(e.capex)||0);
+    const pers2=e.pers?e.persList:[];return mkModelo(e.tipo,e.modelo,parseInt(e.qtd)||1,e.mobPrev||'',pers2,0,e.cond||'nova',parseFloat(e.capex)||0);
   });
   const frota={id:nid(),_macro:true,area:'frota',label:'🔄 Frota Rollout',modelos};
   const docs={id:nid(),_macro:true,area:'docs',label:'📄 Documentação',children:
@@ -1331,7 +1331,7 @@ function buildData(){
   const fm={id:nid(),_macro:true,area:'frota',label:'Frota',icon:'⚙',modelos:[]};expState[fm.id]=true;
   WD.equips.filter(e=>e.tipo&&e.modelo&&e.qtd>0).forEach(e=>{
     const pers=e.pers?e.persList:[];
-    fm.modelos.push(mkModelo(e.tipo,e.modelo,parseInt(e.qtd)||1,e.mobPrev||base,pers,parseFloat(e.vlrUnit)||0,e.cond||'nova',parseFloat(e.capex)||0));
+    fm.modelos.push(mkModelo(e.tipo,e.modelo,parseInt(e.qtd)||1,e.mobPrev||'',pers,parseFloat(e.vlrUnit)||0,e.cond||'nova',parseFloat(e.capex)||0));
   });
   if(!fm.modelos.length)fm.modelos.push(mkModelo('Escavadeira','336D',1,base,[],0,'nova',0));
   data.push(fm);
@@ -1724,7 +1724,7 @@ function renderHome(){
   const and=PROJETOS.filter(p=>isImpl(p)&&!isConc(p));const conc=PROJETOS.filter(p=>isImpl(p)&&isConc(p));const rolloutP=PROJETOS.filter(p=>isRollout(p));
   let rA='';
   if(!and.length)rA=`<tr><td colspan="10" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum projeto em andamento. Clique em "+ Novo projeto" para começar.</td></tr>`;
-  else and.forEach(p=>{const ats=allAtivos(p.data);const tot=ats.length,ent=ats.filter(a=>a.status==='sf-ent').length;const pct=tot?Math.round(ent/tot*100):0;const fat=fatMes(p);rA+=`<tr onclick="openProj('${p.id}')" style="cursor:pointer;"><td><span class="proj-link">${p.nome}</span></td><td style="color:var(--text-dim);">${p.cliente}</td><td style="color:var(--text-dim);">${p.comercial||'—'}</td><td style="text-align:center;font-weight:600;">${tot}</td><td style="text-align:center;"><span class="badge ${ent===tot?'bg-green':ent>0?'bg-blue':'bg-gray'}">${ent}</span></td><td style="font-size:11px;color:var(--text-dim);">${pendRes(p)}</td><td style="font-size:12px;">${fmtD(p.mob)}</td><td style="font-size:11.5px;font-weight:500;color:var(--accent);">${fat>0?fmtCur(fat):'—'}</td><td><div style="display:flex;align-items:center;gap:5px;"><div class="prog-bar"><div class="prog-fill ${pct===100?'full':''}" style="width:${pct}%"></div></div><span style="font-size:10px;color:var(--text-muted);width:24px;">${pct}%</span></div></td><td style="white-space:nowrap;"><button onclick="openEditWiz('${p.id}',event)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:12px;padding:2px 3px;" title="Editar projeto">✏️</button><button onclick="askDel('${p.id}','${p.nome.replace(/'/g,"\\'")}',event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px;" title="Excluir">🗑</button></td></tr>`;
+  else and.forEach(p=>{const ats=allAtivos(p.data);const tot=ats.length,ent=ats.filter(a=>a.status==='sf-ent').length;const pct=tot?Math.round(ent/tot*100):0;const fat=fatMes(p);rA+=`<tr onclick="openProj('${p.id}')" style="cursor:pointer;"><td><span class="proj-link">${p.nome}</span></td><td style="color:var(--text-dim);">${p.cliente}</td><td style="color:var(--text-dim);">${p.comercial||'—'}</td><td style="text-align:center;font-weight:600;">${tot}</td><td style="text-align:center;"><span class="badge ${ent===tot?'bg-green':ent>0?'bg-blue':'bg-gray'}">${ent}</span></td><td style="font-size:11px;color:var(--text-dim);">${pendRes(p)}</td><td style="font-size:12px;">${(()=>{const _fm=p.data.find(m=>m.area==='frota');const _mb=(_fm?_fm.modelos:[]).map(mo=>mo.mobPrev).filter(Boolean).sort()[0]||'';return _mb?fmtD(_mb):'<i style="color:var(--text-muted);font-size:10px;">Sem previsão</i>';})()}</td><td style="font-size:11.5px;font-weight:500;color:var(--accent);">${fat>0?fmtCur(fat):'—'}</td><td><div style="display:flex;align-items:center;gap:5px;"><div class="prog-bar"><div class="prog-fill ${pct===100?'full':''}" style="width:${pct}%"></div></div><span style="font-size:10px;color:var(--text-muted);width:24px;">${pct}%</span></div></td><td style="white-space:nowrap;"><button onclick="openEditWiz('${p.id}',event)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:12px;padding:2px 3px;" title="Editar projeto">✏️</button><button onclick="askDel('${p.id}','${p.nome.replace(/'/g,"\\'")}',event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px;" title="Excluir">🗑</button></td></tr>`;
   rA+="";});
   document.getElementById('tbody-and').innerHTML=rA;
   let rC='';
@@ -1746,7 +1746,7 @@ function renderHome(){
         const pct=tot?Math.round(ent/tot*100):0;
         const fm=p.data.find(function(m){return m.area==='frota';});
         const pends=(fm?fm.modelos:[]).map(function(mo){const sg=mo.subgrupos&&mo.subgrupos[0];const pN=sg?sg.ativos.filter(function(a){return a.status!=='sf-ent';}).length:0;return pN>0?mo.modelo+': '+pN+'un.':'';}).filter(Boolean).join(' · ');
-        const mobPrev=(fm?fm.modelos:[]).map(function(mo){return mo.mobPrev||'';}).filter(Boolean).sort()[0]||p.mob||'';
+        const mobPrev=(fm?fm.modelos:[]).map(function(mo){return mo.mobPrev||'';}).filter(Boolean).sort()[0]||'';
         const clr=PROJ_COLORS[pi%PROJ_COLORS.length];
         rR+='<tr data-pid="'+p.id+'" onclick="openProj(this.dataset.pid)" style="cursor:pointer;">'
           +'<td><span style="color:'+clr+';font-weight:500;">🔄 '+p.nome+'</span></td>'
@@ -2024,7 +2024,7 @@ function addAtivoMo(moId){
   const p=getProj();if(!p)return;
   const mo=findG(moId);if(!mo)return;
   const sg=mo.subgrupos&&mo.subgrupos[0];if(!sg)return;
-  const novoAtivo=mkAtivo(sg.ativos.length+1,mo.mobPrev||p.mob,[],mo.cond||'nova');
+  const novoAtivo=mkAtivo(sg.ativos.length+1,mo.mobPrev||'',[],mo.cond||'nova');
   sg.ativos.push(novoAtivo);
   mo.qtd=sg.ativos.length; // atualiza contagem
   expState[moId]=true;expState[sg.id]=true;expState[novoAtivo.id]=true;
@@ -3015,13 +3015,20 @@ function renderImplProg(){
     fm.modelos.forEach(function(mo){
       (mo.subgrupos||[]).forEach(function(sg){
         sg.ativos.forEach(function(a){
-          var dtRef=a.dtReprog||a.dtProg||a.dtPrev;if(!dtRef)return; // sem data real → Aguardando programação
-          var d=new Date(dtRef+'T00:00:00'),dow=d.getDay()||7,seg=new Date(d);seg.setDate(d.getDate()-(dow-1));
+          // Previsto: usa data ORIGINAL (programada/prevista) — reprogramada não entra no previsto
+          var dtOrig=a.dtProg||a.dtPrev;if(!dtOrig)return;
+          var dtReprog=a.dtReprog&&a.dtReprog!==dtOrig?a.dtReprog:'';
+          // Semana do previsto = semana original
+          var d=new Date(dtOrig+'T00:00:00'),dow=d.getDay()||7,seg=new Date(d);seg.setDate(d.getDate()-(dow-1));
           var sem=seg.toISOString().slice(0,10);
           semPrev[sem]=(semPrev[sem]||0)+1;
-          if(!semCards[sem])semCards[sem]=[];
-          semCards[sem].push({proj:p.nome,ativo:a.label,modelo:(mo.label||mo.modelo),dt:dtRef,
-            dtOrig:a.dtProg||a.dtPrev||mo.mobPrev,reprog:!!(a.dtReprog&&a.dtReprog!==(a.dtProg||a.dtPrev||mo.mobPrev)),
+          // Card aparece na semana atual (reprogramada se houver, senão original)
+          var dtCard=dtReprog||dtOrig;
+          var dc=new Date(dtCard+'T00:00:00'),dowc=dc.getDay()||7,segc=new Date(dc);segc.setDate(dc.getDate()-(dowc-1));
+          var semCard=segc.toISOString().slice(0,10);
+          if(!semCards[semCard])semCards[semCard]=[];
+          semCards[semCard].push({proj:p.nome,ativo:a.label,modelo:(mo.label||mo.modelo),dt:dtCard,
+            dtOrig:dtOrig,reprog:!!dtReprog,
             entregue:a.status==='sf-ent',filial:a.filial||''});
           if(a.dtExec||a.status==='sf-ent'){
             var dtE=a.dtExec||dtRef,de=new Date(dtE+'T00:00:00'),dowe=de.getDay()||7,sege=new Date(de);
