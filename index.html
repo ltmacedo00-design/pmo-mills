@@ -609,12 +609,12 @@ table.pmo tr:last-child td{border-bottom:none;}
 
   <!-- Nav principal -->
   <div class="sb-nav">
-    <div class="ntab active" onclick="setNtab(0)"><span class="ntab-icon">🏠</span>Visão Geral</div>
-    <div class="ntab" onclick="setNtab(0);renderHome()" style="display:none" id="ntab-proj"></div>
-    <div class="ntab" onclick="setNtab(1)"><span class="ntab-icon">📋</span>Kanban Frotas</div>
-    <div class="ntab" onclick="setNtab(2)"><span class="ntab-icon">📊</span>Visão Comercial</div>
-    <div class="ntab" onclick="setNtab(4)"><span class="ntab-icon">🗓️</span>Prog. Implantação</div>
-    <div class="ntab" onclick="tryAdminTab()"><span class="ntab-icon">🔒</span>Painel Administrador</div>
+    <div class="ntab active" data-ntab="0" onclick="setNtab(0)"><span class="ntab-icon">🏠</span>Visão Geral</div>
+    <div class="ntab" data-ntab="0" onclick="setNtab(0);renderHome()" style="display:none" id="ntab-proj"></div>
+    <div class="ntab" data-ntab="1" onclick="setNtab(1)"><span class="ntab-icon">📋</span>Kanban Frotas</div>
+    <div class="ntab" data-ntab="2" onclick="setNtab(2)"><span class="ntab-icon">📊</span>Visão Comercial</div>
+    <div class="ntab" data-ntab="4" onclick="setNtab(4)"><span class="ntab-icon">🗓️</span>Prog. Implantação</div>
+    <div class="ntab" data-ntab="3" onclick="tryAdminTab()"><span class="ntab-icon">🔒</span>Painel Administrador</div>
   </div>
 
   <div class="sb-sep"></div>
@@ -1098,7 +1098,7 @@ function setNtab(i){
   }
   currentNtab=i;
   if(i!==0)currentProjId=null;
-  document.querySelectorAll('.ntab').forEach((t,j)=>t.classList.toggle('active',j===i));
+  document.querySelectorAll('.ntab[data-ntab]').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.ntab)===i));
   hideAllViews();
   const target=document.getElementById(NTAB_VIEWS[i]);
   if(target)target.classList.add('active');
