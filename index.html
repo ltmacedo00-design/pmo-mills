@@ -1993,7 +1993,7 @@ function selFilial(id,val){
     +'onchange="onChange(this.dataset.nid,this.dataset.field,this.value)">'
     +opts+'</select>';
 }
-function dCells(node,cols,stList){return cols.map(col=>{if(col.k==='dtPrev')return`<td>${iD(node.id,'dtPrev',node.dtPrev,true)}</td>`;if(col.k==='dtProg')return`<td>${iD(node.id,'dtProg',node.dtProg)}</td>`;if(col.k==='dtReprog')return`<td>${iD(node.id,'dtReprog',node.dtReprog)}</td>`;if(col.k==='dtExec')return`<td>${iD(node.id,'dtExec',node.dtExec)}</td>`;if(col.k==='entrega')return`<td>${iD(node.id,'entrega',node.entrega||'')}</td>`;if(col.k==='prcOrc')return`<td>${iN(node.id,'prcOrc',node.prcOrc)}</td>`;if(col.k==='prcExec')return`<td>${iN(node.id,'prcExec',node.prcExec)}</td>`;if(col.k==='delta')return`<td id="dlt-${node.id}" style="white-space:nowrap;">${calcD(node.prcOrc,node.prcExec)}</td>`;if(col.k==='obs')return`<td>${iT(node.id,'obs',node.obs,'Observação...')}</td>`;if(col.k==='mecanico')return`<td>${iT(node.id,'mecanico',node.mecanico||'','Mecânico...')}</td>`;if(col.k==='responsavel')return`<td>${iT(node.id,'responsavel',node.responsavel||'','Responsável...')}</td>`;return'<td></td>';}).join('');}
+function dCells(node,cols,stList){return cols.map(col=>{if(col.k==='dtPrev')return node.dtPrev?`<td>${iD(node.id,'dtPrev',node.dtPrev,true)}</td>`:`<td style="color:var(--text-muted);font-style:italic;font-size:10.5px;">Ag. programação</td>`;if(col.k==='dtProg')return`<td>${iD(node.id,'dtProg',node.dtProg)}</td>`;if(col.k==='dtReprog')return`<td>${iD(node.id,'dtReprog',node.dtReprog)}</td>`;if(col.k==='dtExec')return`<td>${iD(node.id,'dtExec',node.dtExec)}</td>`;if(col.k==='entrega')return`<td>${iD(node.id,'entrega',node.entrega||'')}</td>`;if(col.k==='prcOrc')return`<td>${iN(node.id,'prcOrc',node.prcOrc)}</td>`;if(col.k==='prcExec')return`<td>${iN(node.id,'prcExec',node.prcExec)}</td>`;if(col.k==='delta')return`<td id="dlt-${node.id}" style="white-space:nowrap;">${calcD(node.prcOrc,node.prcExec)}</td>`;if(col.k==='obs')return`<td>${iT(node.id,'obs',node.obs,'Observação...')}</td>`;if(col.k==='mecanico')return`<td>${iT(node.id,'mecanico',node.mecanico||'','Mecânico...')}</td>`;if(col.k==='responsavel')return`<td>${iT(node.id,'responsavel',node.responsavel||'','Responsável...')}</td>`;return'<td></td>';}).join('');}
 const empN=n=>'<td></td>'.repeat(n);
 function toggleExp(id){expState[id]=!expState[id];renderLista();}
 function expandAll(){Object.keys(expState).forEach(k=>expState[k]=true);renderLista();}
@@ -3015,7 +3015,7 @@ function renderImplProg(){
     fm.modelos.forEach(function(mo){
       (mo.subgrupos||[]).forEach(function(sg){
         sg.ativos.forEach(function(a){
-          var dtRef=a.dtReprog||a.dtProg||a.dtPrev||mo.mobPrev||p.mob;if(!dtRef)return;
+          var dtRef=a.dtReprog||a.dtProg||a.dtPrev;if(!dtRef)return; // sem data real → Aguardando programação
           var d=new Date(dtRef+'T00:00:00'),dow=d.getDay()||7,seg=new Date(d);seg.setDate(d.getDate()-(dow-1));
           var sem=seg.toISOString().slice(0,10);
           semPrev[sem]=(semPrev[sem]||0)+1;
@@ -3054,10 +3054,20 @@ function renderImplProg(){
     board+='<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">'+(semPrev[sem]||0)+' prev. · '+(semReal[sem]||0)+' entregues</span></div>';
     board+='<div style="display:flex;flex-wrap:wrap;gap:8px;">';
     cards.forEach(function(a){
-      var cor=a.reprog?'#f97316':a.entregue?'#22c55e':'#3b82f6',bgC=a.reprog?'#fff7ed':a.entregue?'#f0fdf4':'#eff6ff';
+      var cor=a.entregue?'#22c55e':(a.reprog?'#f97316':'#3b82f6'),bgC=a.entregue?'#f0fdf4':(a.reprog?'#fff7ed':'#eff6ff');
       board+='<div style="border:1.5px solid '+cor+';border-radius:8px;padding:10px 12px;background:'+bgC+';min-width:160px;max-width:210px;flex:1;">';
-      if(a.reprog)board+='<div style="margin-bottom:4px;"><span style="background:#f97316;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;">⚠ Reprogramado</span><div style="font-size:9px;color:#9a6000;margin-top:2px;">Original: '+fmtD(a.dtOrig)+'</div></div>';
-      else if(a.entregue)board+='<div style="margin-bottom:4px;"><span style="background:#22c55e;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;">✓ Entregue</span></div>';
+      if(a.entregue&&a.reprog){
+        board+='<div style="margin-bottom:4px;display:flex;align-items:center;gap:4px;">'
+          +'<span style="background:#22c55e;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;">✓ Entregue</span>'
+          +'<span style="background:#f97316;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;">⚠ Reprogramado</span>'
+          +'</div>'
+          +'<div style="font-size:9px;color:#9a6000;margin-bottom:4px;">Original: '+fmtD(a.dtOrig)+'</div>';
+      } else if(a.reprog){
+        board+='<div style="margin-bottom:4px;"><span style="background:#f97316;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;">⚠ Reprogramado</span>'
+          +'<div style="font-size:9px;color:#9a6000;margin-top:2px;">Original: '+fmtD(a.dtOrig)+'</div></div>';
+      } else if(a.entregue){
+        board+='<div style="margin-bottom:4px;"><span style="background:#22c55e;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;">✓ Entregue</span></div>';
+      }
       board+='<div style="font-size:11px;font-weight:600;color:#1e3a5f;margin-bottom:2px;">'+a.ativo+'</div><div style="font-size:10px;color:#475569;margin-bottom:5px;">'+a.modelo+'</div>';
       board+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;"><span style="font-size:10px;background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;">'+a.proj+'</span>';
       if(a.filial)board+='<span style="font-size:10px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:4px;">'+a.filial+'</span>';
