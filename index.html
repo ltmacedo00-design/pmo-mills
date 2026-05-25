@@ -485,6 +485,7 @@ table.pmo tr:last-child td{border-bottom:none;}
 #view-carga.active{display:block;}
 #view-comercial.active{display:block;}
 #view-admin.active{display:block;}
+#view-impl-prog.active{display:block;}
 .fscreen{display:none;}.fscreen.active{display:flex;}
 
 /* IMPORT MODAL */
@@ -612,6 +613,7 @@ table.pmo tr:last-child td{border-bottom:none;}
     <div class="ntab" onclick="setNtab(0);renderHome()" style="display:none" id="ntab-proj"></div>
     <div class="ntab" onclick="setNtab(1)"><span class="ntab-icon">📋</span>Kanban Frotas</div>
     <div class="ntab" onclick="setNtab(2)"><span class="ntab-icon">📊</span>Visão Comercial</div>
+    <div class="ntab" onclick="setNtab(4)"><span class="ntab-icon">🗓️</span>Prog. Implantação</div>
     <div class="ntab" onclick="tryAdminTab()"><span class="ntab-icon">🔒</span>Painel Administrador</div>
   </div>
 
@@ -668,15 +670,23 @@ table.pmo tr:last-child td{border-bottom:none;}
     <div class="home-mid-row">
       <!-- Gráfico receita — 3 abas -->
       <div class="chart-wrap" id="chart-wrap">
-        <!-- Abas -->
-        <div style="display:flex;gap:2px;margin-bottom:12px;background:var(--surface2);border-radius:7px;padding:3px;">
-          <button id="htab-capa"   class="htab htab-on"  onclick="setHomeTab('capa')"  >Capa de contrato</button>
-          <button id="htab-prop"   class="htab"          onclick="setHomeTab('prop')"  >Fat. proporcional</button>
+        <div style="display:flex;gap:2px;margin-bottom:8px;background:var(--surface2);border-radius:7px;padding:3px;">
+          <button id="htab-capa" class="htab htab-on" onclick="setHomeTab('capa')">Capa de contrato</button>
+          <button id="htab-prop" class="htab" onclick="setHomeTab('prop')">Fat. proporcional</button>
         </div>
-        <div id="home-chart-title" class="chart-title" style="margin-bottom:8px;"></div>
-        <div id="bar-chart" style="width:100%;"></div>
-        <div id="bar-labels"></div>
-        <div id="home-chart-legend" class="chart-legend" style="margin-top:6px;"></div>
+        <div id="home-chart-title" style="font-size:10px;color:var(--text-dim);margin-bottom:6px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <div style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">📈 Previsto</div>
+            <div id="bar-chart" style="height:90px;display:flex;flex-direction:column;justify-content:flex-end;"></div>
+            <div id="bar-labels"></div>
+          </div>
+          <div>
+            <div style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">✅ Realizado</div>
+            <div id="bar-chart-real" style="height:90px;display:flex;flex-direction:column;justify-content:flex-end;"></div>
+            <div id="bar-labels-real"></div>
+          </div>
+        </div>
       </div>
       <!-- Insights -->
       <div class="insights-col">
@@ -916,8 +926,17 @@ table.pmo tr:last-child td{border-bottom:none;}
   </div>
 
 
-  <!-- ══ VIEW: CARGA DE DADOS ══ -->
-  <div id="view-admin" class="screen" style="height:100%;overflow-y:auto;">
+  <!-- ══ VIEW: PROGRAMAÇÃO DE IMPLANTAÇÃO ══ -->
+  <div id="view-impl-prog" class="screen" style="height:100%;overflow-y:auto;">
+    <div style="padding:20px 24px;">
+      <div style="font-size:18px;font-weight:700;color:var(--text-dark);margin-bottom:4px;">🗓️ Programação de Implantação</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:18px;">Mobilizações programadas por semana. Cards reprogramados são destacados em laranja.</div>
+      <div id="impl-prog-board"></div>
+    </div>
+  </div>
+
+  <!-- ══ VIEW: ADMIN ══ -->
+  <div id="view-admin" class="screen"  style="height:100%;overflow-y:auto;">
   <div style="padding:22px 24px;">
     <div style="font-size:16px;font-weight:600;margin-bottom:6px;">Painel Administrador</div>
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:20px;">Gerencie os catálogos de frota e colaboradores, e edite informações dos projetos. <button onclick="lockAdmin()" style="background:var(--red);color:#fff;border:none;border-radius:5px;padding:3px 10px;font-size:11px;cursor:pointer;margin-left:8px;">🔒 Travar painel</button></div>
@@ -1057,8 +1076,8 @@ const diffDays=(a,b)=>{try{return Math.round((new Date(b+'T00:00:00')-new Date(a
 document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
 // ── NAV TABS ───────────────────────────────
-const ALL_VIEW_IDS=['view-home','view-kanban','view-comercial','view-admin','view-proj'];
-const NTAB_VIEWS=['view-home','view-kanban','view-comercial','view-admin'];
+const ALL_VIEW_IDS=['view-home','view-kanban','view-comercial','view-admin','view-proj','view-impl-prog'];
+const NTAB_VIEWS=['view-home','view-kanban','view-comercial','view-admin','view-impl-prog'];
 function hideAllViews(){ALL_VIEW_IDS.forEach(v=>{const el=document.getElementById(v);if(el)el.classList.remove('active');});}
 const ADMIN_PASS='08523691';
 var adminUnlocked=false;
@@ -1086,11 +1105,12 @@ function setNtab(i){
   if(i===1){populateKanFilters();renderKanban();}
   if(i===2){populateComercialFilter();renderComercial();}
   if(i===3){renderAdmin();}
+  if(i===4){renderImplProg();}
   if(i===0){renderHome();}
 }
 
 // ── DATA BUILDERS ──────────────────────────
-function mkNode(label,extra={}){const n={id:nid(),label,status:'sg-pend',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:'',children:[],...extra};expState[n.id]=true;return n;}
+function mkNode(label,extra={}){const n={id:nid(),label,status:'sg-pend',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',entrega:'',prcOrc:'',prcExec:'',obs:'',children:[],...extra};expState[n.id]=true;return n;}
 function mkAtivo(num,mobPrev,pers,cond){
   const n={id:nid(),_ativo:true,label:'Ativo '+num,filial:'',cond,status:'sf-lib',dtPrev:mobPrev,dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:'',personalizacoes:[]};
   expState[n.id]=true;
@@ -1592,66 +1612,22 @@ function setHomeTab(tab){
   });
   renderRevenueChart();
 }
+var _homeTab='capa';
+function setHomeTab(tab){
+  _homeTab=tab;
+  ['capa','prop'].forEach(function(t){var el=document.getElementById('htab-'+t);if(el)el.classList.toggle('htab-on',t===tab);});
+  renderRevenueChart();
+}
 function renderRevenueChart(){
   var maps=buildRevenueData();
-  var td=today().slice(0,7);
-  var mapPrev, mapReal, titleTxt, legendPrev, legendReal;
-  if(_homeTab==='capa'){
-    mapPrev=maps.capa; mapReal=maps.real;
-    titleTxt='📄 Capa de contrato — mensal cheio por mês de início';
-    legendPrev='Previsto (data prog.)'; legendReal='Realizado (data exec.)';
-  } else if(_homeTab==='prop'){
-    mapPrev=maps.prop; mapReal=maps.realProp;
-    titleTxt='⚖️ Fat. proporcional — valor fracionado pelo dia de início no mês';
-    legendPrev='Previsto proporcional'; legendReal='Realizado proporcional';
-  }
   var titleEl=document.getElementById('home-chart-title');
-  if(titleEl)titleEl.textContent=titleTxt;
-  var legEl=document.getElementById('home-chart-legend');
-  if(legEl)legEl.innerHTML=
-    '<div class="leg-item"><div class="leg-dot" style="background:#e8620a;"></div>'+legendPrev+'</div>'
-   +'<div class="leg-item"><div class="leg-dot" style="background:#3a9a6e;opacity:.8;"></div>'+legendReal+'</div>';
-
-  // Unir todas as chaves de mês
-  var allKeys=[...new Set([...Object.keys(mapPrev),...Object.keys(mapReal)])].sort();
-  var fmtK=function(v){return v>=1000000?'R$ '+(v/1000000).toFixed(1)+' mi':v>=1000?'R$ '+(v/1000).toFixed(0)+' mil':'R$ '+v;};
-  var fmtYM=function(ym){var parts=ym.split('-');var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];return (ms[+parts[1]-1]||parts[1])+'/'+parts[0].slice(2);};
-  var maxV=allKeys.reduce(function(m,k){return Math.max(m,mapPrev[k]||0,mapReal[k]||0);},1);
-
-  // Duas séries side-by-side por mês
-  var W=380,chartH=55,padT=14,padB=18,padL=8,padR=8;
-  var plotW=W-padL-padR;
-  var n=allKeys.length;
-  var step=plotW/Math.max(n,1);
-  var bw=Math.max(5,Math.min(14,step*0.35));
-  var gap=1;
-  var totalH=padT+chartH+padB;
-  var svg='<svg viewBox="0 0 '+W+' '+totalH+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;">';
-  svg+='<line x1="'+padL+'" y1="'+(padT+chartH)+'" x2="'+(padL+plotW)+'" y2="'+(padT+chartH)+'" stroke="#e8eef2" stroke-width="1"/>';
-  allKeys.forEach(function(k,i){
-    var cx=padL+step*i+step/2;
-    var vP=mapPrev[k]||0, vR=mapReal[k]||0;
-    var bhP=vP?Math.max(2,Math.round(vP/maxV*chartH)):0;
-    var bhR=vR?Math.max(2,Math.round(vR/maxV*chartH)):0;
-    // Barra previsto (laranja)
-    if(bhP){
-      var xP=cx-bw-gap/2;
-      svg+='<rect x="'+xP+'" y="'+(padT+chartH-bhP)+'" width="'+bw+'" height="'+bhP+'" fill="#e8620a" opacity="0.85" rx="2">';
-      svg+='<title>'+fmtYM(k)+' Prev: '+fmtCur(vP)+'</title></rect>';
-      svg+='<text x="'+(xP+bw/2)+'" y="'+(padT+chartH-bhP-3)+'" font-size="6.5" fill="#e8620a" text-anchor="middle" font-weight="600">'+fmtK(vP)+'</text>';
-    }
-    // Barra realizado (verde)
-    if(bhR){
-      var xR=cx+gap/2;
-      svg+='<rect x="'+xR+'" y="'+(padT+chartH-bhR)+'" width="'+bw+'" height="'+bhR+'" fill="#3a9a6e" opacity="0.78" rx="2">';
-      svg+='<title>'+fmtYM(k)+' Real: '+fmtCur(vR)+'</title></rect>';
-      svg+='<text x="'+(xR+bw/2)+'" y="'+(padT+chartH-bhR-3)+'" font-size="6.5" fill="#3a9a6e" text-anchor="middle" font-weight="600">'+fmtK(vR)+'</text>';
-    }
-    svg+='<text x="'+cx+'" y="'+(padT+chartH+padB-4)+'" font-size="7" fill="#9eb0ba" text-anchor="middle">'+fmtYM(k)+'</text>';
-  });
-  svg+='</svg>';
-  document.getElementById('bar-chart').innerHTML=svg;
-  document.getElementById('bar-labels').innerHTML='';
+  var mapP=_homeTab==='capa'?maps.capa:maps.prop;
+  var mapR=_homeTab==='capa'?maps.real:maps.realProp;
+  if(titleEl)titleEl.textContent=_homeTab==='capa'?'Capa de contrato — mensal cheio por mês':'Faturamento proporcional — valor pelo dia de início';
+  if(typeof renderVcChart==='function'){
+    renderVcChart('bar-chart','bar-labels',mapP,'var(--accent)');
+    renderVcChart('bar-chart-real','bar-labels-real',mapR,'var(--green)');
+  }
 }
 
 // ── HOME ───────────────────────────────────
@@ -1911,7 +1887,7 @@ function normalizarProjeto(proj){
     macro.modelos.forEach(function(mo){
       (mo.subgrupos||[]).forEach(function(sg){
         (sg.ativos||[]).forEach(function(a){
-          if(!a.personalizacoes) a.personalizacoes=[];
+          if(!a.personalizacoes) a.personalizacoes=[];if(a.entrega===undefined)a.entrega='';
             if(a.filial===undefined) a.filial='';
             if(a.prcOrc===undefined) a.prcOrc='';
             if(a.prcExec===undefined) a.prcExec='';
@@ -1987,7 +1963,7 @@ function renderKPIs(){
 }
 
 // ── LISTA ──────────────────────────────────
-const COL_F=[{k:'dtPrev',label:'Dt. Prev. Família',w:118},{k:'dtProg',label:'Programada',w:108},{k:'dtReprog',label:'Reprogramada',w:108},{k:'dtExec',label:'Executada',w:108},{k:'prcOrc',label:'Orçado (R$)',w:108},{k:'prcExec',label:'Executado (R$)',w:108},{k:'delta',label:'Δ',w:50},{k:'obs',label:'Observação',w:190}];
+const COL_F=[{k:'dtPrev',label:'Dt. Prev. Família',w:118},{k:'dtProg',label:'Prog. Embarque',w:118},{k:'dtReprog',label:'Reprog. Embarque',w:118},{k:'dtExec',label:'Embarque',w:108},{k:'entrega',label:'Entrega',w:108},{k:'prcOrc',label:'Orçado (R$)',w:108},{k:'prcExec',label:'Executado (R$)',w:108},{k:'delta',label:'Δ',w:50},{k:'obs',label:'Observação',w:190}];
 const COL_RH=[{k:'dtPrev',label:'Dt. Prev. Família',w:118},{k:'dtProg',label:'Programada',w:108},{k:'dtReprog',label:'Reprogramada',w:108},{k:'dtExec',label:'Executada',w:108},{k:'mecanico',label:'Mecânico',w:150},{k:'responsavel',label:'Resp. regional',w:145},{k:'obs',label:'Observação',w:190}];
 const COL_G=[{k:'dtPrev',label:'Dt. Prev. Família',w:118},{k:'dtProg',label:'Programada',w:108},{k:'dtReprog',label:'Reprogramada',w:108},{k:'dtExec',label:'Executada',w:108},{k:'prcOrc',label:'Orçado (R$)',w:108},{k:'prcExec',label:'Executado (R$)',w:108},{k:'delta',label:'Δ',w:50},{k:'obs',label:'Observação',w:190}];
 const colsFor=area=>area==='rh'?COL_RH:area==='frota'?COL_F:COL_G;
@@ -2017,7 +1993,7 @@ function selFilial(id,val){
     +'onchange="onChange(this.dataset.nid,this.dataset.field,this.value)">'
     +opts+'</select>';
 }
-function dCells(node,cols,stList){return cols.map(col=>{if(col.k==='dtPrev')return`<td>${iD(node.id,'dtPrev',node.dtPrev,true)}</td>`;if(col.k==='dtProg')return`<td>${iD(node.id,'dtProg',node.dtProg)}</td>`;if(col.k==='dtReprog')return`<td>${iD(node.id,'dtReprog',node.dtReprog)}</td>`;if(col.k==='dtExec')return`<td>${iD(node.id,'dtExec',node.dtExec)}</td>`;if(col.k==='prcOrc')return`<td>${iN(node.id,'prcOrc',node.prcOrc)}</td>`;if(col.k==='prcExec')return`<td>${iN(node.id,'prcExec',node.prcExec)}</td>`;if(col.k==='delta')return`<td id="dlt-${node.id}" style="white-space:nowrap;">${calcD(node.prcOrc,node.prcExec)}</td>`;if(col.k==='obs')return`<td>${iT(node.id,'obs',node.obs,'Observação...')}</td>`;if(col.k==='mecanico')return`<td>${iT(node.id,'mecanico',node.mecanico||'','Mecânico...')}</td>`;if(col.k==='responsavel')return`<td>${iT(node.id,'responsavel',node.responsavel||'','Responsável...')}</td>`;return'<td></td>';}).join('');}
+function dCells(node,cols,stList){return cols.map(col=>{if(col.k==='dtPrev')return`<td>${iD(node.id,'dtPrev',node.dtPrev,true)}</td>`;if(col.k==='dtProg')return`<td>${iD(node.id,'dtProg',node.dtProg)}</td>`;if(col.k==='dtReprog')return`<td>${iD(node.id,'dtReprog',node.dtReprog)}</td>`;if(col.k==='dtExec')return`<td>${iD(node.id,'dtExec',node.dtExec)}</td>`;if(col.k==='entrega')return`<td>${iD(node.id,'entrega',node.entrega||'')}</td>`;if(col.k==='prcOrc')return`<td>${iN(node.id,'prcOrc',node.prcOrc)}</td>`;if(col.k==='prcExec')return`<td>${iN(node.id,'prcExec',node.prcExec)}</td>`;if(col.k==='delta')return`<td id="dlt-${node.id}" style="white-space:nowrap;">${calcD(node.prcOrc,node.prcExec)}</td>`;if(col.k==='obs')return`<td>${iT(node.id,'obs',node.obs,'Observação...')}</td>`;if(col.k==='mecanico')return`<td>${iT(node.id,'mecanico',node.mecanico||'','Mecânico...')}</td>`;if(col.k==='responsavel')return`<td>${iT(node.id,'responsavel',node.responsavel||'','Responsável...')}</td>`;return'<td></td>';}).join('');}
 const empN=n=>'<td></td>'.repeat(n);
 function toggleExp(id){expState[id]=!expState[id];renderLista();}
 function expandAll(){Object.keys(expState).forEach(k=>expState[k]=true);renderLista();}
@@ -3031,6 +3007,67 @@ function showSaved(){
 
 
 // ── INIT ───────────────────────────────────
+function renderImplProg(){
+  var el=document.getElementById('impl-prog-board');if(!el)return;
+  var semPrev={},semReal={},semCards={};
+  PROJETOS.filter(function(p){return isImpl(p);}).forEach(function(p){
+    var fm=p.data.find(function(m){return m.area==='frota';});if(!fm)return;
+    fm.modelos.forEach(function(mo){
+      (mo.subgrupos||[]).forEach(function(sg){
+        sg.ativos.forEach(function(a){
+          var dtRef=a.dtReprog||a.dtProg||a.dtPrev||mo.mobPrev||p.mob;if(!dtRef)return;
+          var d=new Date(dtRef+'T00:00:00'),dow=d.getDay()||7,seg=new Date(d);seg.setDate(d.getDate()-(dow-1));
+          var sem=seg.toISOString().slice(0,10);
+          semPrev[sem]=(semPrev[sem]||0)+1;
+          if(!semCards[sem])semCards[sem]=[];
+          semCards[sem].push({proj:p.nome,ativo:a.label,modelo:(mo.label||mo.modelo),dt:dtRef,
+            dtOrig:a.dtProg||a.dtPrev||mo.mobPrev,reprog:!!(a.dtReprog&&a.dtReprog!==(a.dtProg||a.dtPrev||mo.mobPrev)),
+            entregue:a.status==='sf-ent',filial:a.filial||''});
+          if(a.dtExec||a.status==='sf-ent'){
+            var dtE=a.dtExec||dtRef,de=new Date(dtE+'T00:00:00'),dowe=de.getDay()||7,sege=new Date(de);
+            sege.setDate(de.getDate()-(dowe-1));semReal[sege.toISOString().slice(0,10)]=(semReal[sege.toISOString().slice(0,10)]||0)+1;
+          }
+        });
+      });
+    });
+  });
+  var allSems=[...new Set([...Object.keys(semPrev),...Object.keys(semCards)])].sort();
+  if(!allSems.length){el.innerHTML='<div style="text-align:center;padding:60px;color:var(--text-muted);">Nenhuma mobilização com data definida.</div>';return;}
+  var ms=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  var fmtSem=function(s){var d=new Date(s+'T00:00:00'),fim=new Date(d);fim.setDate(d.getDate()+6);return d.getDate()+'/'+ms[d.getMonth()]+'–'+fim.getDate()+'/'+ms[fim.getMonth()];};
+  var semAtual=(function(){var d=new Date(),dow=d.getDay()||7,s=new Date(d);s.setDate(d.getDate()-(dow-1));return s.toISOString().slice(0,10);})();
+  var maxV=Math.max.apply(null,allSems.map(function(s){return Math.max(semPrev[s]||0,semReal[s]||0);}));maxV=maxV||1;
+  var chartH='<div style="background:var(--white);border:1px solid var(--border-soft);border-radius:10px;padding:14px 18px;margin-bottom:20px;"><div style="font-size:12px;font-weight:600;color:var(--text-dark);margin-bottom:12px;">📊 Mobilizações por semana</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
+  [{k:'prev',c:'var(--accent)',l:'📈 Previsto'},{k:'real',c:'var(--green)',l:'✅ Realizado'}].forEach(function(t){
+    var map=t.k==='prev'?semPrev:semReal;
+    chartH+='<div><div style="font-size:9.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">'+t.l+'</div><div style="display:flex;align-items:flex-end;gap:3px;height:90px;border-bottom:1px solid var(--border-soft);">'+allSems.map(function(s){var v=map[s]||0,h=v?Math.max(Math.round(v/maxV*82),4):0;return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;" title="'+fmtSem(s)+': '+v+'">'+(h?'<span style="font-size:8px;color:'+t.c+';font-weight:600;">'+v+'</span>':'<span></span>')+'<div style="width:100%;height:'+h+'px;background:'+t.c+';border-radius:2px 2px 0 0;opacity:.85;"></div></div>';}).join('')+'</div><div style="display:flex;gap:3px;margin-top:3px;">'+allSems.map(function(s){return '<div style="flex:1;text-align:center;font-size:7.5px;color:var(--text-muted);">'+fmtSem(s)+'</div>';}).join('')+'</div></div>';
+  });
+  chartH+='</div></div>';
+  var board='<div style="display:flex;flex-direction:column;gap:14px;">';
+  allSems.forEach(function(sem){
+    var cards=semCards[sem];if(!cards||!cards.length)return;
+    var isPast=sem<semAtual,isCurr=sem===semAtual;
+    board+='<div style="border:'+(isCurr?'2px solid var(--accent)':isPast?'1px solid #e2ecf0':'1px solid var(--border-soft)')+';border-radius:10px;padding:14px 16px;background:'+(isCurr?'#f0f7ff':isPast?'#fafafa':'var(--white)')+';">';
+    board+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:600;color:'+(isCurr?'var(--accent)':isPast?'var(--text-muted)':'var(--text-dark)')+';">'+fmtSem(sem)+'</span>';
+    if(isCurr)board+='<span style="background:var(--accent);color:#fff;font-size:10px;padding:1px 8px;border-radius:10px;font-weight:600;">Semana atual</span>';
+    if(isPast)board+='<span style="background:#e8eef2;color:var(--text-muted);font-size:10px;padding:1px 8px;border-radius:10px;">Passada</span>';
+    board+='<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">'+(semPrev[sem]||0)+' prev. · '+(semReal[sem]||0)+' entregues</span></div>';
+    board+='<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+    cards.forEach(function(a){
+      var cor=a.reprog?'#f97316':a.entregue?'#22c55e':'#3b82f6',bgC=a.reprog?'#fff7ed':a.entregue?'#f0fdf4':'#eff6ff';
+      board+='<div style="border:1.5px solid '+cor+';border-radius:8px;padding:10px 12px;background:'+bgC+';min-width:160px;max-width:210px;flex:1;">';
+      if(a.reprog)board+='<div style="margin-bottom:4px;"><span style="background:#f97316;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;">⚠ Reprogramado</span><div style="font-size:9px;color:#9a6000;margin-top:2px;">Original: '+fmtD(a.dtOrig)+'</div></div>';
+      else if(a.entregue)board+='<div style="margin-bottom:4px;"><span style="background:#22c55e;color:#fff;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600;">✓ Entregue</span></div>';
+      board+='<div style="font-size:11px;font-weight:600;color:#1e3a5f;margin-bottom:2px;">'+a.ativo+'</div><div style="font-size:10px;color:#475569;margin-bottom:5px;">'+a.modelo+'</div>';
+      board+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;"><span style="font-size:10px;background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;">'+a.proj+'</span>';
+      if(a.filial)board+='<span style="font-size:10px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:4px;">'+a.filial+'</span>';
+      board+='</div><div style="font-size:10px;color:'+cor+';font-weight:500;">📅 '+fmtD(a.dt)+'</div></div>';
+    });
+    board+='</div></div>';
+  });
+  board+='</div>';
+  el.innerHTML=chartH+board;
+}
 window.__appReady = true;
 
 // Detectar file:// e avisar o usuário
