@@ -3010,7 +3010,7 @@ function showSaved(){
 function renderImplProg(){
   var el=document.getElementById('impl-prog-board');if(!el)return;
   var semPrev={},semReal={},semCards={};
-  PROJETOS.filter(function(p){return isImpl(p);}).forEach(function(p){
+  PROJETOS.forEach(function(p){  // inclui implantação E rollout
     var fm=p.data.find(function(m){return m.area==='frota';});if(!fm)return;
     fm.modelos.forEach(function(mo){
       (mo.subgrupos||[]).forEach(function(sg){
