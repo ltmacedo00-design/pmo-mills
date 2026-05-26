@@ -605,6 +605,7 @@ table.pmo tr:last-child td{border-bottom:none;}
   <div class="sb-logo">
     <div class="sb-logo-mark">mills</div>
     <div class="sb-logo-sub">PMO Implantação</div>
+    <button onclick="backupHTML()" title="Baixar backup do sistema" style="margin-top:8px;width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:6px;padding:4px 0;font-size:10.5px;cursor:pointer;font-family:inherit;">⬇ Backup</button>
   </div>
 
   <!-- Nav principal -->
@@ -3305,6 +3306,15 @@ document.addEventListener('click',function(e){
       var d=document.getElementById('msdrop-'+id);if(d)d.style.display='none';
     });
 });
+function backupHTML(){
+  var ts=new Date().toISOString().slice(0,16).replace('T','_').replace(/:/g,'-');
+  var blob=new Blob([document.documentElement.outerHTML],{type:'text/html'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='mills_pmo_backup_'+ts+'.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 window.__appReady = true;
 
 // Detectar file:// e avisar o usuário
