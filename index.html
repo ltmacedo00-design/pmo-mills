@@ -278,7 +278,7 @@ select{width:100%;}
 .sb-header{display:none;}
 .sb-title{display:none;}
 .home-wrap{padding:14px 24px 24px;overflow-y:auto;height:100%;}
-.home-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;}
+.home-kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px;}
 .kpi-card{background:var(--white);border:1px solid var(--border-soft);border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;}
 .kpi-card-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
 .kpi-card-body{flex:1;}
@@ -605,7 +605,10 @@ table.pmo tr:last-child td{border-bottom:none;}
   <div class="sb-logo">
     <div class="sb-logo-mark">mills</div>
     <div class="sb-logo-sub">PMO Implantação</div>
-    <button onclick="backupHTML()" title="Baixar backup do sistema" style="margin-top:8px;width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:6px;padding:4px 0;font-size:10.5px;cursor:pointer;font-family:inherit;">⬇ Backup</button>
+    <div style="display:flex;gap:4px;margin-top:8px;">
+      <button onclick="backupHTML()" title="Baixar backup do HTML" style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:6px;padding:4px 0;font-size:10px;cursor:pointer;font-family:inherit;">⬇ HTML</button>
+      <button onclick="backupFirebase()" title="Baixar backup dos dados (Firebase)" style="flex:1;background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.3);color:rgba(255,200,100,0.9);border-radius:6px;padding:4px 0;font-size:10px;cursor:pointer;font-family:inherit;">⬇ Dados</button>
+    </div>
   </div>
 
   <!-- Nav principal -->
@@ -723,7 +726,7 @@ table.pmo tr:last-child td{border-bottom:none;}
     <div class="home-sec">Implantados</div>
     <div class="htbl-wrap">
       <table class="htbl">
-        <thead><tr><th>Projeto</th><th>Cliente</th><th>Local</th><th style="text-align:center;">Equip.</th><th style="width:86px;">Mob.</th><th style="width:30px;"></th></tr></thead>
+        <thead><tr><th>Projeto</th><th>Cliente</th><th>Local</th><th style="text-align:center;">Equip.</th><th style="width:86px;">Mob.</th><th style="width:100px;">Fat./mês</th><th style="width:30px;"></th></tr></thead>
         <tbody id="tbody-impl"></tbody>
       </table>
     </div>
@@ -1637,7 +1640,9 @@ function renderHomeKPIs(){
   const total=all_ats.length,ent=all_ats.filter(a=>a.status==='sf-ent').length;
   const td=today();const atras=all_ats.filter(a=>a.status!=='sf-ent'&&a.dtPrev&&a.dtPrev<td).length;
   const andP=PROJETOS.filter(p=>isImpl(p)&&!isConc(p));
+  const concP2=PROJETOS.filter(p=>isImpl(p)&&isConc(p));
   const fat=andP.reduce((s,p)=>s+fatMes(p),0);
+  const fatConc=concP2.reduce((s,p)=>s+fatMes(p),0);
   const tran=all_ats.filter(a=>a.status==='sf-tran').length;
   const kpi=(icon,iconBg,lbl,val,valColor,sub)=>
     `<div class="kpi-card">
@@ -1653,7 +1658,8 @@ function renderHomeKPIs(){
     kpi('📦','#dcfce7','Ativos prev. para mob.',total,'',ent+' entregues · '+(total?Math.round(ent/total*100):0)+'%')+
     kpi('⏰','#fee2e2','Em atraso',atras,atras>0?'var(--red)':'var(--green)',atras>0?'Atenção necessária':'Dentro do prazo')+
     kpi('🚛','#e0f2fe','Em trânsito',tran,'var(--blue)','Aguardando check-in')+
-    kpi('💰','#fef9c3','Fat. est. portfólio/mês',fat>0?fmtCur(fat):'—','var(--accent)','Base nos vlr. cadastrados');
+    kpi('💰','#fef9c3','Fat. andamento/mês',fat>0?fmtCur(fat):'—','var(--accent)','Projetos em andamento')+
+    kpi('🏆','#dcfce7','Capa contrato implantados',fatConc>0?fmtCur(fatConc):'—','var(--green)','Operações implantadas');
 }
 function renderInsights(){
   const td=today();const tips=[];
@@ -1729,9 +1735,8 @@ function renderHome(){
   rA+="";});
   document.getElementById('tbody-and').innerHTML=rA;
   let rC='';
-  if(!conc.length)rC=`<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum projeto implantado ainda.</td></tr>`;
-  else conc.forEach(p=>{rC+=`<tr onclick="openProj('${p.id}')"><td><span class="proj-link">${p.nome}</span></td><td style="color:var(--text-dim);">${p.cliente}</td><td style="color:var(--text-dim);">${p.local}</td><td style="text-align:center;"><span class="badge bg-green">${allAtivos(p.data).length}</span></td><td style="font-size:12px;">${fmtD(p.mob)}</td><td><button onclick="askDel('${p.id}','${p.nome.replace(/'/g,"\\'")}',event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px;" title="Excluir">🗑</button></td></tr>`;
-  rA+="";});
+  if(!conc.length)rC=`<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum projeto implantado ainda.</td></tr>`;
+  else conc.forEach(p=>{const _fat=fatMes(p);rC+=`<tr onclick="openProj('${p.id}')"><td><span class="proj-link">${p.nome}</span></td><td style="color:var(--text-dim);">${p.cliente}</td><td style="color:var(--text-dim);">${p.local}</td><td style="text-align:center;"><span class="badge bg-green">${allAtivos(p.data).length}</span></td><td style="font-size:12px;">${fmtD(p.mob)}</td><td style="font-size:11.5px;font-weight:500;color:var(--green);">${_fat>0?fmtCur(_fat):'—'}</td><td><button onclick="askDel('${p.id}','${p.nome.replace(/'/g,"\'")}',event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;" title="Excluir">🗑</button></td></tr>`;});
   document.getElementById('tbody-impl').innerHTML=rC;
   // Tabela Rollout
   const tbR=document.getElementById('tbody-rollout');
@@ -3306,6 +3311,23 @@ document.addEventListener('click',function(e){
       var d=document.getElementById('msdrop-'+id);if(d)d.style.display='none';
     });
 });
+function backupFirebase(){
+  // Lê todos os dados do Firebase e baixa como JSON
+  db.ref('/').once('value').then(function(snap){
+    var data=snap.val();
+    var ts=new Date().toISOString().slice(0,16).replace('T','_').replace(/:/g,'-');
+    var json=JSON.stringify(data,null,2);
+    var blob=new Blob([json],{type:'application/json'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='mills_pmo_dados_'+ts+'.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    mostrarSalvo();
+  }).catch(function(e){
+    alert('Erro ao exportar dados: '+e.message);
+  });
+}
 function backupHTML(){
   var ts=new Date().toISOString().slice(0,16).replace('T','_').replace(/:/g,'-');
   var blob=new Blob([document.documentElement.outerHTML],{type:'text/html'});
