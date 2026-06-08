@@ -3091,23 +3091,27 @@ function renderImplProg(){
           var dtEmbarque=a.dtExec||'';
           var dtEntrega=a.entrega||'';
 
-          // Semana do embarque para filtro e coleta
+          // Realizado usa a data de entrega real (a.entrega)
+          // Se entrega não preenchida, usa embarque (dtExec) como fallback
+          var dtReal=dtEntrega||dtEmbarque;
+
+          // Semana do realizado para filtro e coleta
           var semEmbarque='';
-          if(dtEmbarque){
-            var de=new Date(dtEmbarque+'T00:00:00'),dowe=de.getDay()||7,sege=new Date(de);
+          if(dtReal){
+            var de=new Date(dtReal+'T00:00:00'),dowe=de.getDay()||7,sege=new Date(de);
             sege.setDate(de.getDate()-(dowe-1));
             semEmbarque=sege.toISOString().slice(0,10);
             allEmbarques[semEmbarque]=1;
           }
           if(valEmb.length&&valEmb.indexOf(semEmbarque)<0)return;
 
-          // Previsto: semana da data original
+          // Previsto: semana da data ORIGINAL (dtProg||dtPrev — nunca reprogramada)
           var d=new Date(dtOrig+'T00:00:00'),dow=d.getDay()||7,seg=new Date(d);
           seg.setDate(d.getDate()-(dow-1));
           var sem=seg.toISOString().slice(0,10);
           semPrev[sem]=(semPrev[sem]||0)+1;
 
-          // Realizado: semana do embarque
+          // Realizado: semana da data de entrega real
           if(semEmbarque)semReal[semEmbarque]=(semReal[semEmbarque]||0)+1;
 
           // Card: semana da data atual
@@ -3204,13 +3208,14 @@ function renderImplProg(){
       (mo.subgrupos||[]).forEach(function(sg){
         sg.ativos.forEach(function(a){
           var dtO=a.dtProg||a.dtPrev;if(!dtO)return;
-          var dtE=a.dtExec;
+          // Realizado = data entrega real; fallback para embarque
+          var dtE=a.entrega||a.dtExec;
           totalPrev++;
           if(dtE){
-            // semana orig
+            // semana prevista (data original, nunca reprogramada)
             var d1=new Date(dtO+'T00:00:00'),dow1=d1.getDay()||7,s1=new Date(d1);s1.setDate(d1.getDate()-(dow1-1));
             var semO=s1.toISOString().slice(0,10);
-            // semana embarque
+            // semana da entrega real
             var d2=new Date(dtE+'T00:00:00'),dow2=d2.getDay()||7,s2=new Date(d2);s2.setDate(d2.getDate()-(dow2-1));
             var semE=s2.toISOString().slice(0,10);
             if(semE===semO)totalAdh++;
