@@ -171,11 +171,7 @@ function mostrarSalvo(){
   setTimeout(function(){ el.classList.remove('show'); }, 2000);
 }
 
-// Remover loader após 3s
-setTimeout(function(){
-  var el = document.getElementById('fb-loader');
-  if(el && el.parentNode) el.parentNode.removeChild(el);
-}, 3000);
+// Loader removido após login bem-sucedido
 
 console.log('Firebase inicializado — SDK gstatic');
 </script>
@@ -540,14 +536,32 @@ table.pmo tr:last-child td{border-bottom:none;}
 <body>
 
 <!-- Loading Overlay -->
-<div id="fb-loader" style="position:fixed;inset:0;background:rgba(26,51,64,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
-  <div style="font-size:28px;font-weight:700;color:#fff;letter-spacing:-1px;">mills</div>
-  <div style="display:flex;gap:6px;">
-    <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:fb-pulse 1s infinite 0s;"></div>
-    <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:fb-pulse 1s infinite .2s;"></div>
-    <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:fb-pulse 1s infinite .4s;"></div>
+<div id="fb-loader" style="position:fixed;inset:0;background:#1a3340;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+  <!-- Tela de login -->
+  <div id="login-box" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:40px 44px;width:340px;display:flex;flex-direction:column;align-items:center;gap:18px;">
+    <div style="font-size:32px;font-weight:700;color:#fff;letter-spacing:-1px;margin-bottom:4px;">mills</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.45);margin-top:-12px;">PMO Implantação</div>
+    <div style="width:100%;display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+      <input id="login-nome" type="text" placeholder="Nome de usuário" autocomplete="username"
+        style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:13px;font-family:inherit;outline:none;"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-senha').focus()">
+      <input id="login-senha" type="password" placeholder="Senha" autocomplete="current-password"
+        style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:13px;font-family:inherit;outline:none;"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button onclick="doLogin()" style="width:100%;padding:11px;background:#e8620a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:.02em;">Entrar</button>
+    <div id="login-err" style="font-size:11.5px;color:#f87171;min-height:16px;text-align:center;"></div>
   </div>
-  <div style="font-size:13px;color:rgba(255,255,255,0.55);">Conectando ao Firebase...</div>
+  <!-- Loader (aparece durante verificação) -->
+  <div id="login-loading" style="display:none;flex-direction:column;align-items:center;gap:12px;">
+    <div style="font-size:28px;font-weight:700;color:#fff;letter-spacing:-1px;">mills</div>
+    <div style="display:flex;gap:6px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:#e8620a;animation:fb-pulse 1s infinite 0s;"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:#e8620a;animation:fb-pulse 1s infinite .2s;"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:#e8620a;animation:fb-pulse 1s infinite .4s;"></div>
+    </div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.55);">Carregando...</div>
+  </div>
 </div>
 <style>
 @keyframes fb-pulse{0%,100%{opacity:.3;transform:scale(.8);}50%{opacity:1;transform:scale(1.2);}}
@@ -612,6 +626,7 @@ table.pmo tr:last-child td{border-bottom:none;}
   <div class="sb-logo">
     <div class="sb-logo-mark">mills</div>
     <div class="sb-logo-sub">PMO Implantação</div>
+    <div id="sb-user-label" style="font-size:9.5px;color:rgba(255,255,255,0.4);margin-top:2px;text-align:center;"></div>
     <div style="display:flex;gap:4px;margin-top:8px;">
       <button onclick="backupHTML()" title="Baixar backup do HTML" style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);border-radius:6px;padding:4px 0;font-size:10px;cursor:pointer;font-family:inherit;">⬇ HTML</button>
       <button onclick="backupFirebase()" title="Baixar backup dos dados (Firebase)" style="flex:1;background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.3);color:rgba(255,200,100,0.9);border-radius:6px;padding:4px 0;font-size:10px;cursor:pointer;font-family:inherit;">⬇ Dados</button>
@@ -739,7 +754,7 @@ table.pmo tr:last-child td{border-bottom:none;}
     <div class="home-sec">Implantados</div>
     <div class="htbl-wrap">
       <table class="htbl">
-        <thead><tr><th>Projeto</th><th>Cliente</th><th>Local</th><th style="text-align:center;">Equip.</th><th style="width:86px;">Mob.</th><th style="width:100px;">Fat./mês</th><th style="width:30px;"></th></tr></thead>
+        <thead><tr><th>Projeto</th><th>Cliente</th><th>Local</th><th style="text-align:center;">Equip.</th><th style="width:86px;">Mob.</th><th style="width:100px;">Fat./mês</th><th style="width:108px;">Proposta</th><th style="width:118px;">Contrato</th><th style="width:128px;">Conf. Mob.</th><th style="width:30px;"></th></tr></thead>
         <tbody id="tbody-impl"></tbody>
       </table>
     </div>
@@ -978,6 +993,39 @@ table.pmo tr:last-child td{border-bottom:none;}
       <div class="import-tab active" id="itab-0" onclick="setImportTab(0)">🚜 Catálogo de Frota</div>
       <div class="import-tab" id="itab-1" onclick="setImportTab(1)">👤 Cargos disponíveis</div>
       <div class="import-tab" id="itab-2" onclick="setImportTab(2)">🏭 Filiais / Operações</div>
+      <div class="import-tab" id="itab-3" onclick="setImportTab(3)">👥 Usuários</div>
+    </div>
+
+    <!-- USUÁRIOS -->
+    <div id="icontent-3" style="display:none;">
+      <div style="font-size:13px;font-weight:600;color:var(--text-dark);margin-bottom:14px;">Gerenciar usuários de acesso</div>
+
+      <!-- Formulário novo usuário -->
+      <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--text-dark);">➕ Novo usuário</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div>
+            <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">Nome</div>
+            <input id="usr-nome" type="text" class="winput" placeholder="Ex: Luana" style="width:140px;height:30px;font-size:12px;">
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">Senha</div>
+            <input id="usr-senha" type="password" class="winput" placeholder="••••" style="width:120px;height:30px;font-size:12px;">
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">Permissão</div>
+            <select id="usr-perm" class="winput" style="width:150px;height:30px;font-size:12px;">
+              <option value="viewer">👁 Somente visualizar</option>
+              <option value="editor">✏️ Visualizar e editar</option>
+            </select>
+          </div>
+          <button onclick="usrCriar()" style="height:30px;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:0 16px;font-size:12px;font-weight:500;cursor:pointer;">Criar</button>
+        </div>
+        <div id="usr-msg" style="margin-top:8px;font-size:11px;"></div>
+      </div>
+
+      <!-- Lista de usuários -->
+      <div id="usr-lista"></div>
     </div>
 
     <!-- FROTA -->
@@ -1770,8 +1818,12 @@ function renderHome(){
   rA+="";});
   document.getElementById('tbody-and').innerHTML=rA;
   let rC='';
-  if(!conc.length)rC=`<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum projeto implantado ainda.</td></tr>`;
-  else conc.forEach(p=>{const _fat=fatMes(p);rC+=`<tr onclick="openProj('${p.id}')"><td><span class="proj-link">${p.nome}</span></td><td style="color:var(--text-dim);">${p.cliente}</td><td style="color:var(--text-dim);">${p.local}</td><td style="text-align:center;"><span class="badge bg-green">${allAtivos(p.data).length}</span></td><td style="font-size:12px;">${fmtD(p.mob)}</td><td style="font-size:11.5px;font-weight:500;color:var(--green);">${_fat>0?fmtCur(_fat):'—'}</td><td><button onclick="askDel('${p.id}','${p.nome.replace(/'/g,"\'")}',event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;" title="Excluir">🗑</button></td></tr>`;});
+  if(!conc.length)rC=`<tr><td colspan="10" style="padding:18px;text-align:center;color:var(--text-muted);">Nenhum projeto implantado ainda.</td></tr>`;
+  else conc.forEach(p=>{const _fat=fatMes(p);rC+=`<tr onclick="openProj('${p.id}')"><td><span class="proj-link">${p.nome}</span></td><td style="color:var(--text-dim);">${p.cliente}</td><td style="color:var(--text-dim);">${p.local}</td><td style="text-align:center;"><span class="badge bg-green">${allAtivos(p.data).length}</span></td><td style="font-size:12px;">${fmtD(p.mob)}</td><td style="font-size:11.5px;font-weight:500;color:var(--green);">${_fat>0?fmtCur(_fat):'—'}</td>` +
+    `<td onclick="event.stopPropagation()" style="padding:3px 4px;"><select data-pid="${p.id}" data-fld="stProposta" onchange="hmStChange(this)" class="hmst-sel ${p.stProposta==='enviada'?'st-green':p.stProposta==='ag-envio'?'st-yellow':'st-empty'}"><option value="">—</option><option value="ag-envio" ${p.stProposta==='ag-envio'?'selected':''}>Ag. envio</option><option value="enviada" ${p.stProposta==='enviada'?'selected':''}>Enviada</option></select></td>` +
+    `<td onclick="event.stopPropagation()" style="padding:3px 4px;"><select data-pid="${p.id}" data-fld="stContrato" onchange="hmStChange(this)" class="hmst-sel ${p.stContrato==='assinado'?'st-green':p.stContrato==='ag-assinatura'?'st-orange':p.stContrato==='ag-contrato'?'st-yellow':'st-empty'}"><option value="">—</option><option value="ag-contrato" ${p.stContrato==='ag-contrato'?'selected':''}>Ag. contrato</option><option value="ag-assinatura" ${p.stContrato==='ag-assinatura'?'selected':''}>Ag. assinatura</option><option value="assinado" ${p.stContrato==='assinado'?'selected':''}>Assinado</option></select></td>` +
+    `<td onclick="event.stopPropagation()" style="padding:3px 4px;"><select data-pid="${p.id}" data-fld="stMob" onchange="hmStChange(this)" class="hmst-sel ${p.stMob==='confirmado'?'st-green':p.stMob==='aut-cliente'?'st-orange':p.stMob==='aut-comercial'?'st-blue':'st-empty'}"><option value="">—</option><option value="aut-comercial" ${p.stMob==='aut-comercial'?'selected':''}>Aut. comercial</option><option value="aut-cliente" ${p.stMob==='aut-cliente'?'selected':''}>Aut. cliente</option><option value="confirmado" ${p.stMob==='confirmado'?'selected':''}>Confirmado</option></select></td>` +
+    `<td onclick="event.stopPropagation()"><button onclick="askDel('${p.id}','${p.nome.replace(/'/g,"\'")}',event)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;" title="Excluir">🗑</button></td></tr>`;});
   document.getElementById('tbody-impl').innerHTML=rC;
   // Tabela Rollout
   const tbR=document.getElementById('tbody-rollout');
@@ -2195,7 +2247,7 @@ function renderCarga(){
 }
 function setImportTab(i){
   importTab=i;
-  [0,1].forEach(j=>{
+  [0,1,2,3].forEach(j=>{
     document.getElementById('itab-'+j)?.classList.toggle('active',j===i);
     const el=document.getElementById('icontent-'+j);
     if(el)el.style.display=j===i?'block':'none';
@@ -2864,9 +2916,11 @@ function renderAdmin(){
 function setImportTab(i){
   importTab=i;
   document.querySelectorAll('.import-tab').forEach((t,j)=>t.classList.toggle('active',j===i));
-  document.getElementById('icontent-0').style.display=i===0?'block':'none';
-  document.getElementById('icontent-1').style.display=i===1?'block':'none';
-  document.getElementById('icontent-2').style.display=i===2?'block':'none';
+  [0,1,2,3].forEach(function(j){
+    var el=document.getElementById('icontent-'+j);
+    if(el)el.style.display=i===j?'block':'none';
+  });
+  if(i===3)usrRender();
 }
 function parseFrotaPaste(){
   const raw=document.getElementById('paste-frota').value.trim();
@@ -3594,7 +3648,154 @@ function hmStChange(sel){
     .then(function(){mostrarSalvo();_lastSaveTs[pid]=Date.now()+3000;})
     .catch(function(e){console.error('Erro salvar status:',e.message);});
 }
+// ══ GESTÃO DE USUÁRIOS ══════════════════════════════════════════
+var USR_REF = 'usuarios';
+function usrCriar(){
+  var nome  = (document.getElementById('usr-nome').value||'').trim();
+  var senha = (document.getElementById('usr-senha').value||'').trim();
+  var perm  = document.getElementById('usr-perm').value;
+  var msg   = document.getElementById('usr-msg');
+  if(!nome||!senha){msg.textContent='Preencha nome e senha.';msg.style.color='#e53e3e';return;}
+  db.ref(USR_REF).once('value').then(function(snap){
+    var users = snap.val()||{};
+    // Verifica duplicidade
+    if(Object.values(users).find(function(u){return u.nome.toLowerCase()===nome.toLowerCase();})){
+      msg.textContent='Usuário "'+nome+'" já existe.';msg.style.color='#e53e3e';return;
+    }
+    var id = 'u'+Date.now().toString(36);
+    users[id] = {id:id, nome:nome, senha:senha, perm:perm, ativo:true};
+    db.ref(USR_REF+'/'+id).set(users[id]).then(function(){
+      msg.textContent='✓ Usuário "'+nome+'" criado com sucesso!';
+      msg.style.color='#15803d';
+      document.getElementById('usr-nome').value='';
+      document.getElementById('usr-senha').value='';
+      usrRender();
+    });
+  });
+}
+function usrRender(){
+  var el=document.getElementById('usr-lista');if(!el)return;
+  db.ref(USR_REF).once('value').then(function(snap){
+    var users=snap.val()||{};
+    var list=Object.values(users).sort(function(a,b){return a.nome.localeCompare(b.nome);});
+    if(!list.length){el.innerHTML='<div style="color:var(--text-muted);font-size:12px;">Nenhum usuário cadastrado.</div>';return;}
+    var html='<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+      +'<thead><tr style="background:var(--surface2);">'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dark);">Nome</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dark);">Permissão</th>'
+      +'<th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dark);">Status</th>'
+      +'<th style="padding:8px 10px;width:140px;"></th>'
+      +'</tr></thead><tbody>';
+    list.forEach(function(u){
+      var permLabel=u.perm==='editor'?'✏️ Visualizar e editar':'👁 Somente visualizar';
+      var permColor=u.perm==='editor'?'#1d4ed8':'#6b7280';
+      var ativoLabel=u.ativo!==false?'Ativo':'Inativo';
+      var ativoColor=u.ativo!==false?'#15803d':'#e53e3e';
+      html+='<tr style="border-bottom:1px solid var(--border-soft);">'
+        +'<td style="padding:8px 10px;font-weight:500;">'+u.nome+'</td>'
+        +'<td style="padding:8px 10px;color:'+permColor+';">'+permLabel+'</td>'
+        +'<td style="padding:8px 10px;color:'+ativoColor+';font-weight:500;">'+ativoLabel+'</td>'
+        +'<td style="padding:8px 10px;display:flex;gap:6px;">'
+        +'<select data-uid="'+u.id+'" onchange="usrAltPerm(this.dataset.uid,this.value)" style="font-size:11px;padding:2px 5px;border-radius:5px;border:1px solid var(--border);height:26px;">'
+        +'<option value="viewer"'+( u.perm==='viewer'?' selected':'')+'>👁 Visualizar</option>'
+        +'<option value="editor"'+(u.perm==='editor'?' selected':'')+'>✏️ Editar</option>'
+        +'</select>'+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    el.innerHTML=html;
+  });
+}
+function usrAltPerm(id,perm){
+  db.ref(USR_REF+'/'+id+'/perm').set(perm).then(function(){usrRender();mostrarSalvo();});
+}
+function usrToggle(id,ativo,nome){
+  db.ref(USR_REF+'/'+id+'/ativo').set(!ativo).then(function(){usrRender();});
+}
+function usrDel(id,nome){
+  if(!confirm('Excluir usuário "'+nome+'"?'))return;
+  db.ref(USR_REF+'/'+id).remove().then(function(){usrRender();});
+}
+// Criar usuário padrão Luana na inicialização se não existir
+function initDefaultUsers(){
+  db.ref(USR_REF).once('value').then(function(snap){
+    var users=snap.val()||{};
+    var hasLuana=Object.values(users).find(function(u){return u.nome.toLowerCase()==='luana';});
+    if(!hasLuana){
+      var id='u_luana';
+      db.ref(USR_REF+'/'+id).set({id:id,nome:'Luana',senha:'5555',perm:'editor',ativo:true});
+    }
+  });
+}
+// ══ AUTENTICAÇÃO ════════════════════════════════════════════════
+var _currentUser = null; // {id, nome, perm, ativo}
+
+function doLogin(){
+  var nome  = (document.getElementById('login-nome').value||'').trim();
+  var senha = (document.getElementById('login-senha').value||'').trim();
+  var err   = document.getElementById('login-err');
+  if(!nome||!senha){err.textContent='Preencha nome e senha.';return;}
+  err.textContent='';
+  // Mostrar loading
+  document.getElementById('login-box').style.display='none';
+  document.getElementById('login-loading').style.display='flex';
+  db.ref('usuarios').once('value').then(function(snap){
+    var users = snap.val()||{};
+    var user  = Object.values(users).find(function(u){
+      return u.nome.toLowerCase()===nome.toLowerCase() && u.senha===senha && u.ativo!==false;
+    });
+    if(user){
+      _currentUser = user;
+      // Remover loader e mostrar app
+      var loader = document.getElementById('fb-loader');
+      if(loader) loader.parentNode.removeChild(loader);
+      // Inicializar app
+      _initApp();
+      // Bloquear edição se viewer
+      if(user.perm==='viewer') applyViewerMode();
+    } else {
+      document.getElementById('login-box').style.display='flex';
+      document.getElementById('login-loading').style.display='none';
+      err.textContent = 'Usuário ou senha inválidos.';
+      document.getElementById('login-senha').value='';
+    }
+  }).catch(function(){
+    document.getElementById('login-box').style.display='flex';
+    document.getElementById('login-loading').style.display='none';
+    err.textContent = 'Erro de conexão. Tente novamente.';
+  });
+}
+
+function applyViewerMode(){
+  // Desabilitar todos os botões de edição e inputs após o app carregar
+  setTimeout(function(){
+    // Esconder botões de criar/editar/excluir
+    document.querySelectorAll('.btn-accent, .tbl-icon-btn, button[onclick*="openWiz"], button[onclick*="openEditWiz"], button[onclick*="askDel"]').forEach(function(el){
+      el.style.display='none';
+    });
+    // Esconder aba admin
+    document.querySelectorAll('.ntab[onclick*="tryAdminTab"]').forEach(function(el){
+      el.style.display='none';
+    });
+    // Desabilitar inputs e selects no kanban e lista de tarefas
+    document.querySelectorAll('input[type="date"], select.sf-sel, .hmst-sel').forEach(function(el){
+      el.disabled=true;
+      el.style.pointerEvents='none';
+      el.style.opacity='0.6';
+    });
+  }, 800);
+}
+
+function getCurrentUserName(){
+  return _currentUser ? _currentUser.nome : '?';
+}
+
 window.__appReady = true;
+initDefaultUsers();
+// Atualizar label do usuário na sidebar
+(function(){
+  var lbl = document.getElementById('sb-user-label');
+  if(lbl && _currentUser) lbl.textContent = '👤 ' + _currentUser.nome;
+})();
 
 // Detectar file:// e avisar o usuário
 if(window.location.protocol === 'file:'){
@@ -3618,18 +3819,22 @@ if(window.location.protocol === 'file:'){
     });
 }
 
-// Remove loader immediately — app is ready
-var _ldr = document.getElementById('fb-loader');
-if(_ldr && _ldr.parentNode) _ldr.parentNode.removeChild(_ldr);
-populateKanFilters();
-renderHome();
-renderSidebar();
-// If Firebase already loaded data, re-render with it
-if(window.__fbLoaded){
+// Mostrar tela de login — não remover o loader aqui
+// O loader só é removido em doLogin() após autenticação bem-sucedida
+// Aguardar Firebase carregar dados antes de liberar o app
+function _initApp(){
+  populateKanFilters();
   renderHome();
   renderSidebar();
-  populateKanFilters();
-  populateComercialFilter();
+  if(window.__fbLoaded){
+    renderHome();
+    renderSidebar();
+    populateKanFilters();
+    populateComercialFilter();
+  }
+  // Atualizar label do usuário na sidebar
+  var lbl = document.getElementById('sb-user-label');
+  if(lbl && _currentUser) lbl.textContent = '👤 ' + _currentUser.nome;
 }
 </script>
 </body>
