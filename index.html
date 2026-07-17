@@ -123,6 +123,7 @@ db.ref('catalogo/filiais').on('value', function(snap){
 // Salvar projeto
 function dbSalvarProjeto(p){
   if(!p) return;
+  if(isViewer()){console.warn('[VIEWER] Save bloqueado');return;}
   // Registra timestamp do save para o listener não sobrescrever por 3s
   _lastSaveTs[p.id] = Date.now();
   db.ref('projetos/' + p.id).set(JSON.stringify(p))
@@ -3765,24 +3766,76 @@ function doLogin(){
   });
 }
 
+function isViewer(){
+  return _currentUser && _currentUser.perm === 'viewer';
+}
+
 function applyViewerMode(){
-  // Desabilitar todos os botões de edição e inputs após o app carregar
-  setTimeout(function(){
-    // Esconder botões de criar/editar/excluir
-    document.querySelectorAll('.btn-accent, .tbl-icon-btn, button[onclick*="openWiz"], button[onclick*="openEditWiz"], button[onclick*="askDel"]').forEach(function(el){
-      el.style.display='none';
-    });
+  // 1. CSS global — bloqueia TUDO de escrita via pointer-events
+  var style = document.createElement('style');
+  style.id = 'viewer-mode-css';
+  style.textContent = [
+    // Esconder botões de criar/editar/excluir/salvar
+    '.btn-accent, .tbl-icon-btn, .wiz-btn-primary, .wiz-btn-secondary,',
+    'button[onclick*="openWiz"], button[onclick*="openEditWiz"], button[onclick*="askDel"],',
+    'button[onclick*="wizCreate"], button[onclick*="wizNext"], button[onclick*="salvar"],',
+    'button[onclick*="backupHTML"], button[onclick*="backupFirebase"],',
+    'button[onclick*="addAtivo"], button[onclick*="addMo"], button[onclick*="kcChangeStatus"],',
+    '.kan-add-btn, .sb-add-btn { display:none !important; }',
+    // Desabilitar todos os inputs e selects
+    'input[type="date"], input[type="text"], input[type="number"], input[type="password"],',
+    'textarea, select.sf-sel, select.sf-status, .hmst-sel, select[onchange*="kcChange"],',
+    'select[onchange*="hmSt"], select[onchange*="sfChange"] {',
+    '  pointer-events:none !important;',
+    '  opacity:0.6 !important;',
+    '  cursor:not-allowed !important;',
+    '}',
     // Esconder aba admin
+    '.ntab[onclick*="tryAdminTab"] { display:none !important; }',
+    // Bloquear cliques em cards kanban que abrem edição
+    '.kan-card-d { cursor:default !important; }',
+  ].join('\n');
+  document.head.appendChild(style);
+
+  // 2. Interceptar funções de escrita no Firebase — retornam sem fazer nada
+  var _bloqueadas = [
+    'dbSalvarProjeto','dbExcluirProjeto','dbSalvarFrota','dbSalvarCargos',
+    'dbSalvarFiliais','dbSalvarCatalogo','hmStChange','kcChangeStatus',
+    'saveCell','salvarAtivo','wizCreate','openWiz','openEditWiz','openWizRollout',
+    'askDel','addAtivoMo','tryAdminTab','backupFirebase'
+  ];
+  _bloqueadas.forEach(function(fn){
+    if(typeof window[fn] === 'function'){
+      window[fn] = function(){
+        console.log('[VIEWER] Ação bloqueada: '+fn);
+      };
+    }
+  });
+
+  // 3. Bloquear abertura de projeto para edição (só leitura)
+  var _origOpenProj = window.openProj;
+  if(_origOpenProj){
+    window.openProj = function(id){
+      _origOpenProj(id);
+      // Desabilitar todos os inputs dentro da view de projeto
+      setTimeout(function(){
+        document.querySelectorAll('#view-proj input, #view-proj select, #view-proj textarea').forEach(function(el){
+          el.disabled = true;
+          el.style.pointerEvents = 'none';
+        });
+        document.querySelectorAll('#view-proj button').forEach(function(el){
+          el.style.display = 'none';
+        });
+      }, 300);
+    };
+  }
+
+  // 4. Aplicar visualmente após renderização
+  setTimeout(function(){
     document.querySelectorAll('.ntab[onclick*="tryAdminTab"]').forEach(function(el){
-      el.style.display='none';
+      el.style.display = 'none';
     });
-    // Desabilitar inputs e selects no kanban e lista de tarefas
-    document.querySelectorAll('input[type="date"], select.sf-sel, .hmst-sel').forEach(function(el){
-      el.disabled=true;
-      el.style.pointerEvents='none';
-      el.style.opacity='0.6';
-    });
-  }, 800);
+  }, 500);
 }
 
 function getCurrentUserName(){
