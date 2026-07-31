@@ -89,6 +89,7 @@ db.ref('projetos').on('value', function(snap){
 var _lastFrotaSaveTs   = 0;
 var _lastCargosSaveTs  = 0;
 var _lastFiliaisSaveTs = 0;
+var _lastWhatsSaveTs   = 0;
 
 db.ref('catalogo/frota').on('value', function(snap){
   var val = snap.val();
@@ -118,6 +119,34 @@ db.ref('catalogo/filiais').on('value', function(snap){
      document.getElementById('tab-lista').classList.contains('active')){
     try{ renderLista(); }catch(e){}
   }
+});
+
+db.ref('catalogo/whatsContatos').on('value', function(snap){
+  var val = snap.val();
+  if(Date.now() - _lastWhatsSaveTs < 5000) return;
+  if(!val){
+    // Primeira vez (sem cadastro ainda): semeia com os contatos conhecidos hoje.
+    // A partir daqui, tudo é gerenciado pelo painel Admin > Contatos WhatsApp.
+    WHATS_CONTATOS=[
+      {nome:'Eder Moura', tel:'+55 18 99720-0960', pin:'', tipo:'coordenador'},
+      {nome:'Bruno Campanhans', tel:'+55 19 99924-0456', pin:'', tipo:'coordenador'},
+      {nome:'Daniel', tel:'+55 19 99662-6040', pin:'', tipo:'coordenador'},
+      {nome:'Eder Torres', tel:'+55 18 99812-5829', pin:'', tipo:'fixo'},
+      {nome:'João Gabriel', tel:'+55 18 99624-0413', pin:'', tipo:'fixo'}
+    ];
+    dbSalvarWhatsContatos();
+    return;
+  }
+  WHATS_CONTATOS = Array.isArray(val) ? val : Object.values(val);
+  console.log('[PMO] Contatos WhatsApp carregados:', WHATS_CONTATOS.length);
+  try{ if(document.getElementById('icontent-4')&&document.getElementById('icontent-4').style.display!=='none') renderWhatsContatosTable(); }catch(e){}
+});
+
+db.ref('reprogHistorico').on('value', function(snap){
+  var val = snap.val();
+  REPROG_HISTORICO = val ? Object.values(val) : [];
+  console.log('[PMO] Histórico de reprogramações carregado:', REPROG_HISTORICO.length);
+  try{ if(document.getElementById('view-reprog-hist')&&document.getElementById('view-reprog-hist').classList.contains('active')) renderReprogHist(); }catch(e){}
 });
 
 // Salvar projeto
@@ -159,6 +188,17 @@ function dbSalvarFiliais(){
   db.ref('catalogo/filiais').set(FILIAIS_LIST)
     .then(function(){ mostrarSalvo(); _lastFiliaisSaveTs = Date.now(); console.log('[PMO] Filiais salvas:', FILIAIS_LIST.length); })
     .catch(function(e){ console.error('[PMO] Erro filiais:', e.message); });
+}
+function dbSalvarWhatsContatos(){
+  _lastWhatsSaveTs = Date.now();
+  db.ref('catalogo/whatsContatos').set(WHATS_CONTATOS)
+    .then(function(){ mostrarSalvo(); _lastWhatsSaveTs = Date.now(); console.log('[PMO] Contatos WhatsApp salvos:', WHATS_CONTATOS.length); })
+    .catch(function(e){ console.error('[PMO] Erro contatos whats:', e.message); });
+}
+function dbSalvarReprogHist(entry){
+  db.ref('reprogHistorico/'+entry.id).set(entry)
+    .then(function(){ mostrarSalvo(); })
+    .catch(function(e){ console.error('[PMO] Erro histórico reprog:', e.message); });
 }
 // Compat: dbSalvarCatalogo salva tudo (usado em casos legados)
 function dbSalvarCatalogo(){
@@ -484,6 +524,7 @@ table.pmo tr:last-child td{border-bottom:none;}
 #view-admin.active{display:block;}
 #view-impl-prog.active{display:block;}
 #view-kan-custom.active{display:block;}
+#view-reprog-hist.active{display:block;}
 .fscreen{display:none;}.fscreen.active{display:flex;}
 
 /* IMPORT MODAL */
@@ -618,6 +659,29 @@ table.pmo tr:last-child td{border-bottom:none;}
 </div>
 </div>
 
+<!-- ENVIO WHATSAPP: coordenador + contatos fixos -->
+<div id="ov-whats" class="overlay">
+<div class="confirm-modal" style="width:380px;max-width:92vw;">
+  <div id="whats-modal-body"></div>
+  <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+    <button class="yn" onclick="fecharModalWhats()">Fechar</button>
+  </div>
+</div>
+</div>
+
+<!-- MOTIVO DE REPROGRAMAÇÃO (obrigatório ao mudar a data) -->
+<div id="ov-reprog" class="overlay">
+<div class="confirm-modal" style="width:360px;max-width:92vw;">
+  <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Motivo da reprogramação</div>
+  <div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;">Selecione por que essa data está sendo reprogramada. Isso alimenta o histórico da aba "Histórico de Reprogramações".</div>
+  <select id="reprog-motivo-sel" class="winput"></select>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+    <button class="yn" onclick="cancelarReprog()">Cancelar</button>
+    <button style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 18px;font-size:12px;font-weight:500;cursor:pointer;" onclick="confirmarReprog()">Confirmar</button>
+  </div>
+</div>
+</div>
+
 <!-- APP -->
 <div class="fscreen active" id="app-main" style="height:100vh;overflow:hidden;">
 
@@ -642,6 +706,7 @@ table.pmo tr:last-child td{border-bottom:none;}
     <div class="ntab" data-ntab="5" onclick="setNtab(5)"><span class="ntab-icon">🔧</span>Kanban Customizações</div>
     <div class="ntab" data-ntab="2" onclick="setNtab(2)"><span class="ntab-icon">📊</span>Visão Comercial</div>
     <div class="ntab" data-ntab="4" onclick="setNtab(4)"><span class="ntab-icon">🗓️</span>Prog. Implantação</div>
+    <div class="ntab" data-ntab="6" onclick="setNtab(6)"><span class="ntab-icon">🔁</span>Histórico Reprogramações</div>
     <div class="ntab" data-ntab="3" onclick="tryAdminTab()"><span class="ntab-icon">🔒</span>Painel Administrador</div>
   </div>
 
@@ -807,7 +872,7 @@ table.pmo tr:last-child td{border-bottom:none;}
       <div class="breadcrumb"><a onclick="goHome()">Projetos</a><span>›</span><span id="bc-nome" style="color:var(--text-dark);"></span></div>
       <div class="ph-title" id="ph-nome"></div>
       <div class="ph-meta">
-        <span id="ph-mob"></span><span id="ph-cliente"></span><span id="ph-local"></span><span id="ph-comercial" style="color:var(--accent);"></span>
+        <span id="ph-mob"></span><span id="ph-cliente"></span><span id="ph-local"></span><span id="ph-comercial" style="color:var(--accent);"></span><span id="ph-coord" style="color:var(--green);"></span><button id="ph-coord-btn" onclick="enviarWhatsCoord(getProj())" style="display:none;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--green);cursor:pointer;margin-left:4px;" title="Enviar mensagem no WhatsApp do coordenador">📲 WhatsApp coordenador</button>
       </div>
       <div class="kpi-strip" style="margin:0 -20px;">
         <div class="kpi-s-item"><div class="kpi-s-lbl">Total ativos</div><div class="kpi-s-val" id="kpi-total">—</div></div>
@@ -984,6 +1049,26 @@ table.pmo tr:last-child td{border-bottom:none;}
     </div>
   </div>
 
+  <!-- ══ VIEW: HISTÓRICO DE REPROGRAMAÇÕES ══ -->
+  <div id="view-reprog-hist" class="screen" style="height:100%;overflow-y:auto;">
+    <div style="padding:20px 24px;">
+      <div style="font-size:18px;font-weight:700;color:var(--text-dark);margin-bottom:4px;">🔁 Histórico de Reprogramações</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:18px;">Todas as vezes que uma data de embarque foi reprogramada, com o motivo informado. Alimentado automaticamente pela Lista de Tarefas.</div>
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">Projeto</div>
+          <select id="rh-filtro-proj" class="winput" style="width:200px;height:32px;font-size:12px;" onchange="renderReprogHist()"><option value="">Todos</option></select>
+        </div>
+        <div>
+          <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">Motivo</div>
+          <select id="rh-filtro-motivo" class="winput" style="width:220px;height:32px;font-size:12px;" onchange="renderReprogHist()"><option value="">Todos</option></select>
+        </div>
+      </div>
+      <div id="reprog-hist-kpis" style="margin-bottom:18px;"></div>
+      <div id="reprog-hist-lista"></div>
+    </div>
+  </div>
+
   <!-- ══ VIEW: ADMIN ══ -->
   <div id="view-admin" class="screen"  style="height:100%;overflow-y:auto;">
   <div style="padding:22px 24px;">
@@ -995,6 +1080,7 @@ table.pmo tr:last-child td{border-bottom:none;}
       <div class="import-tab" id="itab-1" onclick="setImportTab(1)">👤 Cargos disponíveis</div>
       <div class="import-tab" id="itab-2" onclick="setImportTab(2)">🏭 Filiais / Operações</div>
       <div class="import-tab" id="itab-3" onclick="setImportTab(3)">👥 Usuários</div>
+      <div class="import-tab" id="itab-4" onclick="setImportTab(4)">📲 Contatos WhatsApp</div>
     </div>
 
     <!-- USUÁRIOS -->
@@ -1027,6 +1113,47 @@ table.pmo tr:last-child td{border-bottom:none;}
 
       <!-- Lista de usuários -->
       <div id="usr-lista"></div>
+    </div>
+
+    <!-- CONTATOS WHATSAPP -->
+    <div id="icontent-4" style="display:none;">
+      <div style="font-size:13px;font-weight:600;color:var(--text-dark);margin-bottom:6px;">Gerenciar contatos de WhatsApp</div>
+      <div style="background:var(--blue-bg);border:1px solid #b8d8ee;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--blue);">
+        <strong>Coordenador de manutenção:</strong> aparece na lista de seleção ao cadastrar um projeto.<br>
+        <strong>Contato fixo:</strong> recebe cópia automática de <u>todo</u> projeto criado, independente do coordenador escolhido.<br>
+        <strong>PIN / API Key (CallMeBot):</strong> <u>obrigatório</u> para o envio funcionar. A pessoa precisa adicionar o número do CallMeBot (+34 644 59 71 65) no WhatsApp dela, enviar a frase "I allow callmebot to send me messages" e colar aqui o código que o robô responder.
+      </div>
+
+      <!-- Formulário novo contato -->
+      <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--text-dark);">➕ Novo contato</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div>
+            <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">Nome</div>
+            <input id="wc-nome" type="text" class="winput" placeholder="Ex: Eder Moura" style="width:150px;height:30px;font-size:12px;">
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">WhatsApp</div>
+            <input id="wc-tel" type="text" class="winput" placeholder="+55 18 99999-9999" style="width:150px;height:30px;font-size:12px;">
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">Tipo</div>
+            <select id="wc-tipo" class="winput" style="width:170px;height:30px;font-size:12px;">
+              <option value="coordenador">🔧 Coordenador de manutenção</option>
+              <option value="fixo">📌 Contato fixo (recebe tudo)</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:3px;">PIN / API Key (CallMeBot) *</div>
+            <input id="wc-pin" type="text" class="winput" placeholder="Ex: 123456" style="width:130px;height:30px;font-size:12px;">
+          </div>
+          <button onclick="whatsContatoAdd()" style="height:30px;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:0 16px;font-size:12px;font-weight:500;cursor:pointer;">Adicionar</button>
+        </div>
+        <div id="wc-msg" style="margin-top:8px;font-size:11px;"></div>
+      </div>
+
+      <!-- Lista de contatos -->
+      <div id="whats-contatos-lista"></div>
     </div>
 
     <!-- FROTA -->
@@ -1126,6 +1253,13 @@ const KAN_COLS=[
 ];
 const TIPOS={'Escavadeira':['320D','323D','336D','349D','374D'],'Motoniveladora':['120K','140K','160K','16M'],'Trator de Esteira':['D6T','D7E','D8T','D9T'],'Rolo Compactador':['CS56B','CS64B','CS74B'],'Pá Carregadeira':['938K','950K','966K','972K'],'Retroescavadeira':['416F','420F','430F'],'Caminhão Fora de Estrada':['770G','772G','777G','785D'],'Guindaste':['RT650E','GMK4100L','LTM 1100'],'Outro':[]};
 const PERS_BASE=['Ar-condicionado','Câmera de ré','GPS','Faróis LED','Alarme de movimento','Proteção FOPS/ROPS','Extintor adicional','Sistema de pesagem','Bloqueio biométrico'];
+// Contatos de WhatsApp (coordenadores de manutenção + cópias fixas) — cadastrados pelo painel Admin,
+// persistidos em catalogo/whatsContatos. Cada item: {nome, tel, pin, tipo:'coordenador'|'fixo'}
+var WHATS_CONTATOS=[];
+// Motivos padronizados de reprogramação de embarque
+const MOTIVOS_REPROG=['Aguardando liberação oficina','Aguardando contrato','Aguardando liberação do cliente','Aguardando customização','Sem frete disponível'];
+// Histórico de reprogramações (todas as vezes que dtReprog foi alterado, em todos os projetos)
+var REPROG_HISTORICO=[];
 const AREA_COLORS={frota:'#e8620a',rh:'#1a6fa8',docs:'#5340a8',apoio:'#b05a10',campo:'#2d8a5e',outro:'#6b8a99'};
 const PROJ_COLORS=['#e8620a','#1a6fa8','#2d8a5e','#5340a8','#b05a10','#1a7a72','#7a3a88'];
 
@@ -1158,8 +1292,8 @@ const diffDays=(a,b)=>{try{return Math.round((new Date(b+'T00:00:00')-new Date(a
 document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
 // ── NAV TABS ───────────────────────────────
-const ALL_VIEW_IDS=['view-home','view-kanban','view-comercial','view-admin','view-proj','view-impl-prog','view-kan-custom'];
-const NTAB_VIEWS=['view-home','view-kanban','view-comercial','view-admin','view-impl-prog','view-kan-custom'];
+const ALL_VIEW_IDS=['view-home','view-kanban','view-comercial','view-admin','view-proj','view-impl-prog','view-kan-custom','view-reprog-hist'];
+const NTAB_VIEWS=['view-home','view-kanban','view-comercial','view-admin','view-impl-prog','view-kan-custom','view-reprog-hist'];
 function hideAllViews(){ALL_VIEW_IDS.forEach(v=>{const el=document.getElementById(v);if(el)el.classList.remove('active');});}
 const ADMIN_PASS='08523691';
 var adminUnlocked=false;
@@ -1189,6 +1323,7 @@ function setNtab(i){
   if(i===3){renderAdmin();}
   if(i===4){renderImplProg();}
   if(i===5){populateKanCustomFilters();renderKanCustom();}
+  if(i===6){renderReprogHist();}
   if(i===0){renderHome();}
 }
 
@@ -1217,7 +1352,7 @@ function wizAddCargo(sel){
   if(v){if(!WD.cargosLista)WD.cargosLista=[];if(!WD.cargosLista.includes(v))WD.cargosLista.push(v);renderWiz();}
   sel.value='';
 }
-function wdReset(){WD={nome:'',cliente:'',local:'',contrato:'',mob:'',comercial:'',
+function wdReset(){WD={nome:'',cliente:'',local:'',contrato:'',mob:'',comercial:'',coordManut:'',coordManutTel:'',
   equips:[{tipo:'',modelo:'',cond:'nova',qtd:1,vlrUnit:0,capex:0,mobPrev:'',pers:false,persList:[]}],
   temContrat:null,cargos:'',prazoRH:'',ferramental:'',mecanicos:'',lider:'',
   veiculo:null,veiculoTipo:'',veiculoQtd:1,container:null,containerObs:'',outros:'',
@@ -1239,7 +1374,7 @@ function closeWiz(){document.getElementById('ov-wiz').classList.remove('open');}
 function wizSave(){
   // Coleta campos de QUALQUER step que estiver visível
   // Step 0: identificação
-  ['nome','cliente','local','contrato','mob','comercial'].forEach(function(f){
+  ['nome','cliente','local','contrato','mob','comercial','coordManut','coordManutTel'].forEach(function(f){
     var el=document.getElementById('w-'+f);
     if(el) WD[f]=el.value;
   });
@@ -1261,6 +1396,25 @@ function wizPrev(){if(wizStep>0){wizSave();wizStep--;renderWiz();}}
 // ──────────────────────────────────────────────────────────────
 // ROLLOUT WIZARD STEPS
 // ──────────────────────────────────────────────────────────────
+function wizSetCoord(nome){
+  wizSave(); // captura nome/cliente/local/etc. já digitados ANTES de redesenhar a tela
+  WD.coordManut=nome;
+  var c=WHATS_CONTATOS.find(function(x){return x.nome===nome&&x.tipo==='coordenador';});
+  WD.coordManutTel=c?c.tel:'';
+  renderWiz();
+}
+function wizCoordSelectHtml(){
+  var coords=WHATS_CONTATOS.filter(function(c){return c.tipo==='coordenador';});
+  var opts=coords.map(function(c){return '<option value="'+c.nome+'"'+(WD.coordManut===c.nome?' selected':'')+'>'+c.nome+'</option>';}).join('');
+  var vazio=coords.length?'':'<div style="font-size:10.5px;color:var(--red);margin-top:-4px;margin-bottom:6px;">Nenhum coordenador cadastrado ainda — cadastre em Painel Admin → Contatos WhatsApp.</div>';
+  return vazio+'<div class="wr">'
+    +'<div><label class="wlabel">Coordenador de manutenção</label>'
+    +'<select class="winput" id="w-coordManut" onchange="wizSetCoord(this.value)"><option value="">Selecione...</option>'+opts+'</select></div>'
+    +'<div><label class="wlabel">WhatsApp do coordenador</label>'
+    +'<input class="winput" id="w-coordManutTel" value="'+(WD.coordManutTel||'')+'" placeholder="Selecione o coordenador" readonly></div>'
+    +'</div>'
+    +'<div style="font-size:10.5px;color:var(--text-muted);margin-top:-6px;margin-bottom:8px;">📲 Ao salvar, a notificação é enviada automaticamente via CallMeBot para o coordenador e para os contatos fixos cadastrados — sem precisar abrir o WhatsApp ou clicar em Enviar. Requer PIN/API Key cadastrado em cada contato (Painel Admin → Contatos WhatsApp).</div>';
+}
 function renderWizStep0(cont){
   // Step 0 compartilhado: nome, cliente, local, contrato, mob
   cont.innerHTML=
@@ -1330,6 +1484,8 @@ function wizCreate(){
       p.mob     = WD.mob     || p.mob;
       p.comercial = WD.comercial||p.comercial||'';
       p.contrato  = WD.contrato||p.contrato||'';
+      p.coordManut    = WD.coordManut||p.coordManut||'';
+      p.coordManutTel = WD.coordManutTel||p.coordManutTel||'';
 
       // Frota: atualiza configuração dos modelos existentes
       // NUNCA recria ativos, subgrupos, personalizações, status ou datas
@@ -1374,12 +1530,14 @@ function wizCreate(){
     window._editProjId=null;
   } else {
     // Novo projeto: cria, empurra, e guarda referência direta
-    var novoProj={id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),nome:WD.nome||'Novo projeto',cliente:WD.cliente||'—',local:WD.local||'—',mob:WD.mob||today(),comercial:WD.comercial||'',contrato:WD.contrato||'',tipo:wizMode==='rollout'?'rollout':'implantacao',data:wizMode==='rollout'?buildDataRollout():buildData()};
+    var novoProj={id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),nome:WD.nome||'Novo projeto',cliente:WD.cliente||'—',local:WD.local||'—',mob:WD.mob||today(),comercial:WD.comercial||'',contrato:WD.contrato||'',coordManut:WD.coordManut||'',coordManutTel:WD.coordManutTel||'',tipo:wizMode==='rollout'?'rollout':'implantacao',data:wizMode==='rollout'?buildDataRollout():buildData()};
     PROJETOS.push(novoProj);
     projParaSalvar = novoProj; // referência direta, sem find posterior
     window._editProjId=null;
   }
   closeWiz();renderHome();renderSidebar();populateKanFilters();populateComercialFilter();
+  // Notifica coordenador de manutenção (se houver) + contatos fixos via WhatsApp — só em projeto novo
+  if(!editId && novoProj) abrirWhatsAutomatico(novoProj);
   // Se o projeto editado está aberto, atualiza a view imediatamente
   if(projParaSalvar && projParaSalvar.id === currentProjId){
     try{renderKPIs();}catch(e){}
@@ -1486,6 +1644,7 @@ function renderWiz(){
         <div class="wr"><div><label class="wlabel">Nome do projeto</label><input class="winput" id="w-nome" value="${WD.nome}" placeholder="Ex: Mineração Norte — Rollout"></div><div><label class="wlabel">Cliente</label><input class="winput" id="w-cliente" value="${WD.cliente}" placeholder="Razão social"></div></div>
         <div class="wr"><div><label class="wlabel">Local / Obra</label><input class="winput" id="w-local" value="${WD.local}" placeholder="Cidade — UF"></div><div><label class="wlabel">Nº contrato</label><input class="winput" id="w-contrato" value="${WD.contrato}" placeholder="00000-0"></div></div>
         <div class="wr"><div><label class="wlabel">Data prevista de mobilização</label><input class="winput" type="date" id="w-mob" value="${WD.mob}"></div><div><label class="wlabel">Comercial responsável</label><input class="winput" id="w-comercial" value="${WD.comercial}" placeholder="Nome do comercial"></div></div>
+        ${wizCoordSelectHtml()}
       </div>`;
     } else if(wizStep===1){
       // Step 1: Frota — igual ao de implantação MAS sem campo Vlr. unit. loc.
@@ -1525,6 +1684,7 @@ function renderWiz(){
       <div class="wr"><div><label class="wlabel">Nome do projeto</label><input class="winput" id="w-nome" value="${WD.nome}" placeholder="Ex: Mineração Norte"></div><div><label class="wlabel">Cliente</label><input class="winput" id="w-cliente" value="${WD.cliente}" placeholder="Razão social"></div></div>
       <div class="wr"><div><label class="wlabel">Local / Obra</label><input class="winput" id="w-local" value="${WD.local}" placeholder="Cidade — UF"></div><div><label class="wlabel">Nº contrato</label><input class="winput" id="w-contrato" value="${WD.contrato}" placeholder="00000-0"></div></div>
       <div class="wr"><div><label class="wlabel">Data prevista de mobilização</label><input class="winput" type="date" id="w-mob" value="${WD.mob}"></div><div><label class="wlabel">Comercial responsável</label><input class="winput" id="w-comercial" value="${WD.comercial}" placeholder="Nome do comercial"></div></div>
+      ${wizCoordSelectHtml()}
     </div>`;
   } else if(wizStep===1){
     const eqs=WD.equips.map((e,i)=>{return`<div class="eq-card">
@@ -1648,6 +1808,132 @@ Object.defineProperty(window,'_saveTimer',{
   get: function(){ return _saveTimers[currentProjId]||null; },
   set: function(v){ if(currentProjId){ if(v===null){ delete _saveTimers[currentProjId]; } else { _saveTimers[currentProjId]=v; } } }
 });
+
+// ── REPROGRAMAÇÃO: exige motivo estruturado antes de salvar a nova data ──
+function onChangeReprogPrompt(id,val,inputEl){
+  var orig=inputEl.dataset.orig||'';
+  if(!val){
+    // Limpando a data (removendo a reprogramação) — não precisa de motivo
+    onChange(id,'dtReprog',val);
+    inputEl.dataset.orig='';
+    return;
+  }
+  if(val===orig) return; // não mudou de fato
+  window._reprogPending={id:id,val:val,orig:orig,inputEl:inputEl};
+  var sel=document.getElementById('reprog-motivo-sel');
+  sel.innerHTML='<option value="">Selecione o motivo...</option>'+MOTIVOS_REPROG.map(function(m){return '<option value="'+m+'">'+m+'</option>';}).join('');
+  document.getElementById('ov-reprog').classList.add('open');
+}
+function confirmarReprog(){
+  var pend=window._reprogPending;
+  if(!pend)return;
+  var motivo=document.getElementById('reprog-motivo-sel').value;
+  if(!motivo){alert('Selecione o motivo da reprogramação antes de confirmar.');return;}
+  onChange(pend.id,'dtReprog',pend.val);
+  registrarReprog(pend.id,pend.orig,pend.val,motivo);
+  pend.inputEl.dataset.orig=pend.val;
+  window._reprogPending=null;
+  document.getElementById('ov-reprog').classList.remove('open');
+}
+function cancelarReprog(){
+  var pend=window._reprogPending;
+  if(pend&&pend.inputEl) pend.inputEl.value=pend.orig; // reverte visualmente, nada é salvo
+  window._reprogPending=null;
+  document.getElementById('ov-reprog').classList.remove('open');
+}
+function registrarReprog(nodeId,dtAnterior,dtNova,motivo){
+  var p=getProj();
+  var n=findG(nodeId);
+  var entry={
+    id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+    projId:p?p.id:'',
+    projNome:p?p.nome:'—',
+    nodeId:nodeId,
+    nodeLabel:n?(n.label||'Ativo'):'—',
+    dtAnterior:dtAnterior||'',
+    dtNova:dtNova,
+    motivo:motivo,
+    ts:Date.now(),
+    usuario:(_currentUser&&_currentUser.nome)?_currentUser.nome:'—'
+  };
+  REPROG_HISTORICO.push(entry);
+  dbSalvarReprogHist(entry);
+}
+function renderReprogHist(){
+  var filtroProj=document.getElementById('rh-filtro-proj');
+  var filtroMotivo=document.getElementById('rh-filtro-motivo');
+  if(!filtroProj||!filtroMotivo)return;
+
+  var projsUnicos=[];
+  REPROG_HISTORICO.forEach(function(e){ if(e.projNome && projsUnicos.indexOf(e.projNome)===-1) projsUnicos.push(e.projNome); });
+  projsUnicos.sort();
+  var curProjSel=filtroProj.value;
+  filtroProj.innerHTML='<option value="">Todos</option>'+projsUnicos.map(function(n){return '<option value="'+n+'"'+(n===curProjSel?' selected':'')+'>'+n+'</option>';}).join('');
+
+  var curMotivoSel=filtroMotivo.value;
+  filtroMotivo.innerHTML='<option value="">Todos</option>'+MOTIVOS_REPROG.map(function(m){return '<option value="'+m+'"'+(m===curMotivoSel?' selected':'')+'>'+m+'</option>';}).join('');
+
+  var lista=REPROG_HISTORICO.filter(function(e){
+    if(curProjSel && e.projNome!==curProjSel) return false;
+    if(curMotivoSel && e.motivo!==curMotivoSel) return false;
+    return true;
+  }).slice().sort(function(a,b){return b.ts-a.ts;});
+
+  var total=lista.length;
+  var porMotivo={};
+  MOTIVOS_REPROG.forEach(function(m){porMotivo[m]=0;});
+  lista.forEach(function(e){ porMotivo[e.motivo]=(porMotivo[e.motivo]||0)+1; });
+  var motivoTop='—',motivoTopCount=0;
+  Object.keys(porMotivo).forEach(function(m){ if(porMotivo[m]>motivoTopCount){motivoTopCount=porMotivo[m];motivoTop=m;} });
+
+  var porProjeto={};
+  lista.forEach(function(e){ porProjeto[e.projNome]=(porProjeto[e.projNome]||0)+1; });
+  var projTop='—',projTopCount=0;
+  Object.keys(porProjeto).forEach(function(pn){ if(porProjeto[pn]>projTopCount){projTopCount=porProjeto[pn];projTop=pn;} });
+
+  var kpisHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">'
+    +'<div style="background:var(--white);border:1px solid var(--border-soft);border-radius:8px;padding:12px 14px;"><div class="kpi-s-lbl">Total de reprogramações</div><div style="font-size:22px;font-weight:700;color:var(--accent);">'+total+'</div></div>'
+    +'<div style="background:var(--white);border:1px solid var(--border-soft);border-radius:8px;padding:12px 14px;"><div class="kpi-s-lbl">Motivo predominante</div><div style="font-size:13px;font-weight:600;">'+motivoTop+'</div><div style="font-size:10.5px;color:var(--text-muted);">'+motivoTopCount+' ocorrência(s) — '+(total?Math.round(motivoTopCount/total*100):0)+'%</div></div>'
+    +'<div style="background:var(--white);border:1px solid var(--border-soft);border-radius:8px;padding:12px 14px;"><div class="kpi-s-lbl">Projeto mais reprogramado</div><div style="font-size:13px;font-weight:600;">'+projTop+'</div><div style="font-size:10.5px;color:var(--text-muted);">'+projTopCount+' reprogramação(ões)</div></div>'
+    +'<div style="background:var(--white);border:1px solid var(--border-soft);border-radius:8px;padding:12px 14px;"><div class="kpi-s-lbl">Projetos distintos afetados</div><div style="font-size:22px;font-weight:700;">'+Object.keys(porProjeto).length+'</div></div>'
+    +'</div>';
+
+  var maxCount=Math.max.apply(null,MOTIVOS_REPROG.map(function(m){return porMotivo[m]||0;}).concat([1]));
+  var breakdownHtml='<div style="margin-top:14px;background:var(--white);border:1px solid var(--border-soft);border-radius:8px;padding:14px 16px;">'
+    +'<div style="font-size:11.5px;font-weight:600;color:var(--text-dark);margin-bottom:10px;">Reprogramações por motivo</div>'
+    +MOTIVOS_REPROG.map(function(m){
+      var c=porMotivo[m]||0;
+      var pct=total?Math.round(c/total*100):0;
+      var barPct=Math.round(c/maxCount*100);
+      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">'
+        +'<div style="width:190px;font-size:11px;color:var(--text-dim);">'+m+'</div>'
+        +'<div style="flex:1;background:var(--surface2);border-radius:5px;height:14px;overflow:hidden;"><div style="background:var(--accent);height:100%;width:'+barPct+'%;"></div></div>'
+        +'<div style="width:70px;text-align:right;font-size:11px;font-weight:600;">'+c+' ('+pct+'%)</div>'
+        +'</div>';
+    }).join('')
+    +'</div>';
+
+  document.getElementById('reprog-hist-kpis').innerHTML=kpisHtml+breakdownHtml;
+
+  var listaEl=document.getElementById('reprog-hist-lista');
+  if(!lista.length){
+    listaEl.innerHTML='<div style="font-size:11px;color:var(--text-muted);padding:20px;text-align:center;background:var(--surface2);border-radius:7px;margin-top:14px;">Nenhuma reprogramação registrada ainda.</div>';
+    return;
+  }
+  var rows=lista.map(function(e){
+    return '<tr style="border-bottom:1px solid var(--border-soft);">'
+      +'<td style="padding:7px 10px;font-size:11.5px;">'+new Date(e.ts).toLocaleString('pt-BR')+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:500;">'+(e.projNome||'—')+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;">'+(e.nodeLabel||'—')+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;color:var(--text-dim);">'+(e.dtAnterior?fmtD(e.dtAnterior):'—')+' → <strong>'+fmtD(e.dtNova)+'</strong></td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;"><span style="background:var(--blue-bg);color:var(--blue);padding:2px 8px;border-radius:6px;font-size:10.5px;">'+e.motivo+'</span></td>'
+      +'<td style="padding:7px 10px;font-size:11px;color:var(--text-muted);">'+(e.usuario||'—')+'</td>'
+      +'</tr>';
+  }).join('');
+  listaEl.innerHTML='<table style="width:100%;border-collapse:collapse;margin-top:14px;background:var(--white);border:1px solid var(--border-soft);border-radius:8px;overflow:hidden;">'
+    +'<thead><tr style="background:var(--surface2);"><th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text-dim);">Quando</th><th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text-dim);">Projeto</th><th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text-dim);">Item</th><th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text-dim);">Data</th><th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text-dim);">Motivo</th><th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text-dim);">Usuário</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>';
+}
 function isConc(p){const a=allAtivos(p.data);return a.length>0&&a.every(x=>x.status==='sf-ent');}
 function isRollout(p){return p.tipo==='rollout';}
 function isImpl(p){return !isRollout(p);}
@@ -1974,11 +2260,111 @@ function goHome(){
 }
 // Normaliza projeto: garante personalizacoes[] em todos os ativos
 // (ativos antigos no Firebase podem não ter esse campo)
+// ── WHATSAPP: NOTIFICAÇÃO DE NOVO PROJETO (via CallMeBot — envio 100% automático) ───
+function fmtWhatsTel(tel){
+  var d=(tel||'').replace(/\D/g,'');
+  if(!d)return '';
+  if(d.length<=11) d='55'+d; // assume BR sem código do país (DDD+número)
+  return d;
+}
+function resumoEquipamentos(p){
+  var fm=p.data.find(function(m){return m.area==='frota';});
+  if(!fm||!fm.modelos||!fm.modelos.length) return '—';
+  return fm.modelos.map(function(mo){
+    var qtd=mo.subgrupos&&mo.subgrupos[0]?mo.subgrupos[0].ativos.length:(mo.qtd||0);
+    return qtd+'x '+[mo.tipo,mo.modelo].filter(Boolean).join(' ');
+  }).join(', ');
+}
+function totalEquipamentos(p){
+  var fm=p.data.find(function(m){return m.area==='frota';});
+  if(!fm||!fm.modelos) return 0;
+  return fm.modelos.reduce(function(s,mo){return s+(mo.subgrupos&&mo.subgrupos[0]?mo.subgrupos[0].ativos.length:(mo.qtd||0));},0);
+}
+function msgProjeto(p,destNome,isCoord){
+  var quem=(_currentUser&&_currentUser.nome)?_currentUser.nome:'PMO Implantação';
+  var fat=fatMes(p);
+  var abertura=isCoord
+    ?'Olá, '+destNome+'! Você foi designado(a) como *Coordenador de Manutenção* do projeto abaixo.'
+    :'Olá, '+destNome+'! Novo projeto cadastrado no PMO Implantação:';
+  return abertura+'\n\n'
+    +'📋 *Projeto:* '+(p.nome||'—')+'\n'
+    +'🏢 *Cliente:* '+(p.cliente||'—')+'\n'
+    +'📅 *Mobilização prevista:* '+(p.mob?fmtD(p.mob):'—')+'\n'
+    +'⚙️ *Equipamentos:* '+resumoEquipamentos(p)+'\n'
+    +'🔢 *Total de equipamentos:* '+totalEquipamentos(p)+'\n'
+    +'💰 *Valor total do projeto:* '+(fat>0?fmtCur(fat):'—')+'\n\n'
+    +'— '+quem;
+}
+// Coordenador (se cadastrado, com o PIN atual dele) + os contatos fixos que recebem cópia de TODO projeto
+function destinatariosWhats(p){
+  var list=[];
+  if(p.coordManut&&p.coordManutTel){
+    var cc=WHATS_CONTATOS.find(function(x){return x.nome===p.coordManut&&x.tipo==='coordenador';});
+    list.push({nome:p.coordManut,tel:p.coordManutTel,pin:cc?cc.pin:'',isCoord:true});
+  }
+  WHATS_CONTATOS.filter(function(c){return c.tipo==='fixo';}).forEach(function(c){list.push({nome:c.nome,tel:c.tel,pin:c.pin,isCoord:false});});
+  return list;
+}
+// Envia via CallMeBot — chamada HTTP direta, sem abrir aba nem exigir clique no WhatsApp.
+// mode:'no-cors' porque o CallMeBot não retorna cabeçalho CORS; não conseguimos ler a resposta,
+// mas a chamada sai normalmente (best-effort: sem erro de rede = considerado enviado).
+function enviarCallMeBot(tel,apikey,msg){
+  var d=fmtWhatsTel(tel);
+  if(!d||!apikey) return Promise.resolve(false);
+  var url='https://api.callmebot.com/whatsapp.php?phone='+d+'&text='+encodeURIComponent(msg)+'&apikey='+encodeURIComponent(apikey);
+  return fetch(url,{method:'GET',mode:'no-cors'}).then(function(){return true;}).catch(function(e){console.error('[CallMeBot] erro:',e);return false;});
+}
+// Disparo automático ao salvar o projeto — nenhum clique necessário.
+function abrirWhatsAutomatico(p){
+  var dest=destinatariosWhats(p);
+  var semPin=[];
+  dest.forEach(function(d){
+    if(!d.pin){ semPin.push(d.nome); return; }
+    enviarCallMeBot(d.tel,d.pin,msgProjeto(p,d.nome,d.isCoord));
+  });
+  if(semPin.length) alert('⚠️ WhatsApp automático NÃO enviado para: '+semPin.join(', ')+'.\nFalta cadastrar o PIN/API Key do CallMeBot em Painel Admin → Contatos WhatsApp.');
+}
+// Reenvio manual (botão no cabeçalho do projeto) — mesma via CallMeBot, com feedback por destinatário
+function enviarWhatsCoord(p){
+  if(!p){alert('Abra um projeto primeiro.');return;}
+  var dest=destinatariosWhats(p);
+  if(!dest.length){alert('Nenhum destinatário cadastrado. Vá em Painel Admin → Contatos WhatsApp.');return;}
+  window._whatsProjAtual=p;
+  window._whatsDestAtual=dest;
+  var rows=dest.map(function(d,i){
+    var semPin=!d.pin;
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border-soft);">'
+      +'<div><div style="font-size:12.5px;font-weight:600;">'+d.nome+'</div>'
+      +'<div style="font-size:10.5px;color:var(--text-muted);">'+(d.isCoord?'Coordenador de manutenção':'Cópia fixa')+' • '+d.tel+(semPin?' • <span style="color:var(--red);">sem PIN</span>':'')+'</div></div>'
+      +(semPin
+        ?'<span style="font-size:11px;color:var(--red);">⚠ sem PIN</span>'
+        :'<button id="wc-btn-'+i+'" onclick="enviarUmWhats('+i+')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:11.5px;font-weight:500;cursor:pointer;">📲 Reenviar</button>')
+      +'</div>';
+  }).join('');
+  document.getElementById('whats-modal-body').innerHTML=
+    '<div style="font-size:13px;font-weight:600;margin-bottom:2px;">Notificações WhatsApp — '+(p.nome||'')+'</div>'
+    +'<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">Enviado automaticamente via CallMeBot ao criar o projeto. Use os botões abaixo para reenviar.</div>'
+    +rows;
+  document.getElementById('ov-whats').classList.add('open');
+}
+function enviarUmWhats(i){
+  var d=window._whatsDestAtual&&window._whatsDestAtual[i];
+  var p=window._whatsProjAtual;
+  if(!d||!p)return;
+  var btn=document.getElementById('wc-btn-'+i);
+  if(btn){btn.textContent='Enviando...';btn.disabled=true;}
+  enviarCallMeBot(d.tel,d.pin,msgProjeto(p,d.nome,d.isCoord)).then(function(ok){
+    if(btn){btn.textContent=ok?'✓ Enviado':'Erro — tentar de novo';btn.disabled=false;}
+  });
+}
+function fecharModalWhats(){document.getElementById('ov-whats').classList.remove('open');window._whatsProjAtual=null;window._whatsDestAtual=null;}
 function normalizarProjeto(proj){
   if(!proj||!proj.data)return proj;
   if(!proj.stProposta)proj.stProposta='';
   if(!proj.stContrato)proj.stContrato='';
   if(!proj.stMob)proj.stMob='';
+  if(proj.coordManut===undefined)proj.coordManut='';
+  if(proj.coordManutTel===undefined)proj.coordManutTel='';
   proj.data.forEach(function(macro){
     if(macro.area!=='frota'||!macro.modelos)return;
     macro.modelos.forEach(function(mo){
@@ -2015,6 +2401,8 @@ function openProj(pid){
   document.getElementById('ph-cliente').textContent='• '+p.cliente;
   document.getElementById('ph-local').textContent='• 📍 '+p.local;
   document.getElementById('ph-comercial').textContent=p.comercial?'• 🤝 '+p.comercial:'';
+  document.getElementById('ph-coord').textContent=p.coordManut?'• 🔧 '+p.coordManut:'';
+  document.getElementById('ph-coord-btn').style.display='inline-block';
   hideAllViews();
   document.getElementById('view-proj').classList.add('active');
   expState={};
@@ -2066,6 +2454,7 @@ const COL_G=[{k:'dtPrev',label:'Dt. Prev. Família',w:118},{k:'dtProg',label:'Pr
 const colsFor=area=>area==='rh'?COL_RH:area==='frota'?COL_F:COL_G;
 function selSt(id,val,list){return `<select class="st-sel" onchange="onChange('${id}','status',this.value);">${list.map(s=>`<option value="${s.val}"${s.val===val?' selected':''}>${s.label}</option>`).join('')}</select>`;}
 const iD=(id,f,v,acc)=>`<input type="date" value="${v||''}" style="width:115px;${acc?'border-color:var(--accent);font-weight:500;':''}" onchange="onChange('${id}','${f}',this.value);">`;
+const iDReprog=(id,v)=>`<input type="date" value="${v||''}" data-orig="${v||''}" style="width:115px;" onchange="onChangeReprogPrompt('${id}',this.value,this);">`;
 const iT=(id,f,v,ph)=>`<input type="text" value="${v||''}" placeholder="${ph||''}" style="min-width:80px;" onchange="onChange('${id}','${f}',this.value);">`;
 const iN=(id,f,v)=>`<input type="number" min="0" value="${v||''}" placeholder="0" style="width:96px;" onchange="onChange('${id}','${f}',this.value);document.getElementById('dlt-${id}').innerHTML=calcD(window.__fg('${id}').prcOrc,window.__fg('${id}').prcExec);">`;
 function selFilial(id,val){
@@ -2090,7 +2479,7 @@ function selFilial(id,val){
     +'onchange="onChange(this.dataset.nid,this.dataset.field,this.value)">'
     +opts+'</select>';
 }
-function dCells(node,cols,stList){return cols.map(col=>{if(col.k==='dtPrev')return node.dtPrev?`<td>${iD(node.id,'dtPrev',node.dtPrev,true)}</td>`:`<td style="color:var(--text-muted);font-style:italic;font-size:10.5px;">Ag. programação</td>`;if(col.k==='dtProg')return`<td>${iD(node.id,'dtProg',node.dtProg)}</td>`;if(col.k==='dtReprog')return`<td>${iD(node.id,'dtReprog',node.dtReprog)}</td>`;if(col.k==='dtExec')return`<td>${iD(node.id,'dtExec',node.dtExec)}</td>`;if(col.k==='entrega')return`<td>${iD(node.id,'entrega',node.entrega||'')}</td>`;if(col.k==='prcOrc')return`<td>${iN(node.id,'prcOrc',node.prcOrc)}</td>`;if(col.k==='prcExec')return`<td>${iN(node.id,'prcExec',node.prcExec)}</td>`;if(col.k==='delta')return`<td id="dlt-${node.id}" style="white-space:nowrap;">${calcD(node.prcOrc,node.prcExec)}</td>`;if(col.k==='obs')return`<td>${iT(node.id,'obs',node.obs,'Observação...')}</td>`;if(col.k==='mecanico')return`<td>${iT(node.id,'mecanico',node.mecanico||'','Mecânico...')}</td>`;if(col.k==='responsavel')return`<td>${iT(node.id,'responsavel',node.responsavel||'','Responsável...')}</td>`;return'<td></td>';}).join('');}
+function dCells(node,cols,stList){return cols.map(col=>{if(col.k==='dtPrev')return node.dtPrev?`<td>${iD(node.id,'dtPrev',node.dtPrev,true)}</td>`:`<td style="color:var(--text-muted);font-style:italic;font-size:10.5px;">Ag. programação</td>`;if(col.k==='dtProg')return`<td>${iD(node.id,'dtProg',node.dtProg)}</td>`;if(col.k==='dtReprog')return`<td>${iDReprog(node.id,node.dtReprog)}</td>`;if(col.k==='dtExec')return`<td>${iD(node.id,'dtExec',node.dtExec)}</td>`;if(col.k==='entrega')return`<td>${iD(node.id,'entrega',node.entrega||'')}</td>`;if(col.k==='prcOrc')return`<td>${iN(node.id,'prcOrc',node.prcOrc)}</td>`;if(col.k==='prcExec')return`<td>${iN(node.id,'prcExec',node.prcExec)}</td>`;if(col.k==='delta')return`<td id="dlt-${node.id}" style="white-space:nowrap;">${calcD(node.prcOrc,node.prcExec)}</td>`;if(col.k==='obs')return`<td>${iT(node.id,'obs',node.obs,'Observação...')}</td>`;if(col.k==='mecanico')return`<td>${iT(node.id,'mecanico',node.mecanico||'','Mecânico...')}</td>`;if(col.k==='responsavel')return`<td>${iT(node.id,'responsavel',node.responsavel||'','Responsável...')}</td>`;return'<td></td>';}).join('');}
 const empN=n=>'<td></td>'.repeat(n);
 function toggleExp(id){expState[id]=!expState[id];renderLista();}
 function expandAll(){Object.keys(expState).forEach(k=>expState[k]=true);renderLista();}
@@ -2248,7 +2637,7 @@ function renderCarga(){
 }
 function setImportTab(i){
   importTab=i;
-  [0,1,2,3].forEach(j=>{
+  [0,1,2,3,4].forEach(j=>{
     document.getElementById('itab-'+j)?.classList.toggle('active',j===i);
     const el=document.getElementById('icontent-'+j);
     if(el)el.style.display=j===i?'block':'none';
@@ -2294,6 +2683,48 @@ function renderCargosTable(){
     ${CARGOS_LIST.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:8px;font-size:10.5px;background:var(--blue-bg);color:var(--blue);border:1px solid #b8d8ee;">${c}<span onclick="CARGOS_LIST.splice(${i},1);dbSalvarCargos();renderCargosTable();" style="cursor:pointer;"> ×</span></span>`).join('')}
   </div>
   <button onclick="CARGOS_LIST=[];dbSalvarCargos();renderCargosTable();" style="margin-top:6px;background:none;border:1px solid var(--red);border-radius:5px;padding:3px 10px;font-size:11px;color:var(--red);cursor:pointer;">Limpar lista</button>`;
+}
+
+// ── CONTATOS WHATSAPP (Admin) ──────────────────────────
+function whatsContatoAdd(){
+  var nome=(document.getElementById('wc-nome').value||'').trim();
+  var tel=(document.getElementById('wc-tel').value||'').trim();
+  var tipo=document.getElementById('wc-tipo').value||'coordenador';
+  var pin=(document.getElementById('wc-pin').value||'').trim();
+  var msgEl=document.getElementById('wc-msg');
+  if(!nome||!tel){msgEl.innerHTML='<span style="color:var(--red);">Preencha nome e WhatsApp.</span>';return;}
+  WHATS_CONTATOS.push({nome:nome,tel:tel,pin:pin,tipo:tipo});
+  dbSalvarWhatsContatos();
+  document.getElementById('wc-nome').value='';
+  document.getElementById('wc-tel').value='';
+  document.getElementById('wc-pin').value='';
+  msgEl.innerHTML='<span style="color:var(--green);">✓ '+nome+' adicionado.</span>';
+  renderWhatsContatosTable();
+}
+function whatsContatoRemover(i){
+  WHATS_CONTATOS.splice(i,1);
+  dbSalvarWhatsContatos();
+  renderWhatsContatosTable();
+}
+function renderWhatsContatosTable(){
+  const el=document.getElementById('whats-contatos-lista');
+  if(!el)return;
+  if(!WHATS_CONTATOS.length){
+    el.innerHTML='<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center;background:var(--surface2);border-radius:7px;">Nenhum contato cadastrado ainda.</div>';
+    return;
+  }
+  var rows=WHATS_CONTATOS.map(function(c,i){
+    var tipoLbl=c.tipo==='fixo'?'📌 Contato fixo':'🔧 Coordenador';
+    var tipoCor=c.tipo==='fixo'?'var(--accent)':'var(--green)';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border-soft);">'
+      +'<div><div style="font-size:12.5px;font-weight:600;">'+c.nome+'</div>'
+      +'<div style="font-size:10.5px;color:var(--text-muted);">'+c.tel+(c.pin?' • PIN: '+c.pin:'')+'</div></div>'
+      +'<div style="display:flex;align-items:center;gap:8px;">'
+      +'<span style="font-size:10.5px;font-weight:600;color:'+tipoCor+';">'+tipoLbl+'</span>'
+      +'<button onclick="whatsContatoRemover('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">×</button>'
+      +'</div></div>';
+  }).join('');
+  el.innerHTML='<div style="font-size:11px;font-weight:600;color:var(--green);margin-bottom:4px;">✓ '+WHATS_CONTATOS.length+' contato(s) cadastrado(s)</div>'+rows;
 }
 
 // ── EDIT PROJETO ──────────────────────────────────────
@@ -2862,6 +3293,7 @@ function openEditWiz(pid,ev){
   // Step 0: identificação
   WD.nome=p.nome;WD.cliente=p.cliente;WD.local=p.local;WD.mob=p.mob;
   WD.comercial=p.comercial||'';WD.contrato=p.contrato||'';
+  WD.coordManut=p.coordManut||'';WD.coordManutTel=p.coordManutTel||'';
   // Step 1: frota — carrega para exibição mas NÃO será usado para recriar ativos
   const fm=p.data.find(m=>m.area==='frota');
   if(fm&&fm.modelos.length){
@@ -2917,11 +3349,12 @@ function renderAdmin(){
 function setImportTab(i){
   importTab=i;
   document.querySelectorAll('.import-tab').forEach((t,j)=>t.classList.toggle('active',j===i));
-  [0,1,2,3].forEach(function(j){
+  [0,1,2,3,4].forEach(function(j){
     var el=document.getElementById('icontent-'+j);
     if(el)el.style.display=i===j?'block':'none';
   });
   if(i===3)usrRender();
+  if(i===4)renderWhatsContatosTable();
 }
 function parseFrotaPaste(){
   const raw=document.getElementById('paste-frota').value.trim();
@@ -3802,7 +4235,9 @@ function applyViewerMode(){
     'dbSalvarProjeto','dbExcluirProjeto','dbSalvarFrota','dbSalvarCargos',
     'dbSalvarFiliais','dbSalvarCatalogo','hmStChange','kcChangeStatus',
     'saveCell','salvarAtivo','wizCreate','openWiz','openEditWiz','openWizRollout',
-    'askDel','addAtivoMo','tryAdminTab','backupFirebase'
+    'askDel','addAtivoMo','tryAdminTab','backupFirebase',
+    'dbSalvarWhatsContatos','whatsContatoAdd','whatsContatoRemover',
+    'dbSalvarReprogHist','registrarReprog','confirmarReprog'
   ];
   _bloqueadas.forEach(function(fn){
     if(typeof window[fn] === 'function'){
