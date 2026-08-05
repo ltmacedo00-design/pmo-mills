@@ -525,6 +525,7 @@ table.pmo tr:last-child td{border-bottom:none;}
 #view-impl-prog.active{display:block;}
 #view-kan-custom.active{display:block;}
 #view-reprog-hist.active{display:block;}
+#view-kan-docs.active{display:block;}
 .fscreen{display:none;}.fscreen.active{display:flex;}
 
 /* IMPORT MODAL */
@@ -704,6 +705,7 @@ table.pmo tr:last-child td{border-bottom:none;}
     <div class="ntab" data-ntab="0" onclick="setNtab(0);renderHome()" style="display:none" id="ntab-proj"></div>
     <div class="ntab" data-ntab="1" onclick="setNtab(1)"><span class="ntab-icon">📋</span>Kanban Frotas</div>
     <div class="ntab" data-ntab="5" onclick="setNtab(5)"><span class="ntab-icon">🔧</span>Kanban Customizações</div>
+    <div class="ntab" data-ntab="7" onclick="setNtab(7)"><span class="ntab-icon">📄</span>Kanban Documentação</div>
     <div class="ntab" data-ntab="2" onclick="setNtab(2)"><span class="ntab-icon">📊</span>Visão Comercial</div>
     <div class="ntab" data-ntab="4" onclick="setNtab(4)"><span class="ntab-icon">🗓️</span>Prog. Implantação</div>
     <div class="ntab" data-ntab="6" onclick="setNtab(6)"><span class="ntab-icon">🔁</span>Histórico Reprogramações</div>
@@ -1049,6 +1051,20 @@ table.pmo tr:last-child td{border-bottom:none;}
     </div>
   </div>
 
+  <!-- ══ VIEW: KANBAN DOCUMENTAÇÃO ══ -->
+  <div id="view-kan-docs" class="screen" style="height:100%;overflow-y:auto;">
+    <div style="padding:14px 20px 6px;">
+      <div style="font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:10px;">📄 Kanban Documentação</div>
+      <div class="kan-filters">
+        <span class="kan-filter-lbl">Projeto:</span>
+        <div class="ms-wrap" id="ms-kd-proj-wrap"><div class="ms-btn" onclick="msToggle('ms-kd-proj')"><span class="ms-btn-lbl" id="ms-kd-proj-lbl">Todos</span><span class="ms-btn-arrow">▾</span></div><div class="ms-dropdown" id="ms-kd-proj"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="msSearch(this,'ms-kd-proj')"></div><div class="ms-opts" id="ms-kd-proj-opts"></div><div class="ms-footer"><button onclick="msClear('ms-kd-proj');renderKanDocs()">Limpar</button><span class="ms-count" id="ms-kd-proj-cnt"></span></div></div></div>
+        <span class="kan-filter-lbl">Comercial:</span>
+        <div class="ms-wrap" id="ms-kd-com-wrap"><div class="ms-btn" onclick="msToggle('ms-kd-com')"><span class="ms-btn-lbl" id="ms-kd-com-lbl">Todos</span><span class="ms-btn-arrow">▾</span></div><div class="ms-dropdown" id="ms-kd-com"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="msSearch(this,'ms-kd-com')"></div><div class="ms-opts" id="ms-kd-com-opts"></div><div class="ms-footer"><button onclick="msClear('ms-kd-com');renderKanDocs()">Limpar</button><span class="ms-count" id="ms-kd-com-cnt"></span></div></div></div>
+      </div>
+    </div>
+    <div id="kan-docs-board" style="padding:0 20px 20px;overflow-x:auto;"></div>
+  </div>
+
   <!-- ══ VIEW: HISTÓRICO DE REPROGRAMAÇÕES ══ -->
   <div id="view-reprog-hist" class="screen" style="height:100%;overflow-y:auto;">
     <div style="padding:20px 24px;">
@@ -1292,8 +1308,8 @@ const diffDays=(a,b)=>{try{return Math.round((new Date(b+'T00:00:00')-new Date(a
 document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
 // ── NAV TABS ───────────────────────────────
-const ALL_VIEW_IDS=['view-home','view-kanban','view-comercial','view-admin','view-proj','view-impl-prog','view-kan-custom','view-reprog-hist'];
-const NTAB_VIEWS=['view-home','view-kanban','view-comercial','view-admin','view-impl-prog','view-kan-custom','view-reprog-hist'];
+const ALL_VIEW_IDS=['view-home','view-kanban','view-comercial','view-admin','view-proj','view-impl-prog','view-kan-custom','view-reprog-hist','view-kan-docs'];
+const NTAB_VIEWS=['view-home','view-kanban','view-comercial','view-admin','view-impl-prog','view-kan-custom','view-reprog-hist','view-kan-docs'];
 function hideAllViews(){ALL_VIEW_IDS.forEach(v=>{const el=document.getElementById(v);if(el)el.classList.remove('active');});}
 const ADMIN_PASS='08523691';
 var adminUnlocked=false;
@@ -1324,6 +1340,7 @@ function setNtab(i){
   if(i===4){renderImplProg();}
   if(i===5){populateKanCustomFilters();renderKanCustom();}
   if(i===6){renderReprogHist();}
+  if(i===7){populateKanDocsFilters();renderKanDocs();}
   if(i===0){renderHome();}
 }
 
@@ -1356,7 +1373,7 @@ function wdReset(){WD={nome:'',cliente:'',local:'',contrato:'',mob:'',comercial:
   equips:[{tipo:'',modelo:'',cond:'nova',qtd:1,vlrUnit:0,capex:0,mobPrev:'',pers:false,persList:[]}],
   temContrat:null,cargos:'',prazoRH:'',ferramental:'',mecanicos:'',lider:'',
   veiculo:null,veiculoTipo:'',veiculoQtd:1,container:null,containerObs:'',outros:'',
-  docs:[{nome:'',prazo:''}]};}
+  docs:[{nome:'ART',prazo:''},{nome:'Plano de Manutenção',prazo:''},{nome:'Laudo eletromecânico',prazo:''},{nome:'Última Preventiva',prazo:''}]};}
 wdReset();
 function openWiz(){
   wizMode='impl';
@@ -3983,6 +4000,89 @@ function kcChangeStatus(sel){
   renderKanCustom();
 }
 
+function populateKanDocsFilters(){
+  msBuildOpts('ms-kd-proj',PROJETOS.map(function(p){return{val:p.id,lbl:p.nome};}),'Todos','renderKanDocs');
+  var coms=new Set();
+  PROJETOS.forEach(function(p){if(p.comercial)coms.add(p.comercial);});
+  msBuildOpts('ms-kd-com',[...coms],'Todos','renderKanDocs');
+}
+
+function renderKanDocs(){
+  var board=document.getElementById('kan-docs-board');if(!board)return;
+  populateKanDocsFilters();
+
+  var pFils=msVals('ms-kd-proj');
+  var cFils=msVals('ms-kd-com');
+
+  var cols=SG.map(function(s){
+    var m={'sg-pend':{tc:'#8f4010',bg:'#faeada'},'sg-and':{tc:'#186090',bg:'#daeef8'},'sg-conc':{tc:'#1a5c20',bg:'#c8eccc'}}[s.val]||{tc:'#475569',bg:'#f1f5f9'};
+    return {val:s.val,label:s.label,tc:m.tc,bg:m.bg};
+  });
+
+  var items=[];
+  PROJETOS.forEach(function(p){
+    if(pFils.length&&pFils.indexOf(p.id)<0)return;
+    if(cFils.length&&cFils.indexOf(p.comercial||'')<0)return;
+    var dm=p.data.find(function(m){return m.area==='docs';});if(!dm||!dm.children)return;
+    dm.children.forEach(function(d){
+      items.push({
+        id:d.id,label:d.label,status:d.status||'sg-pend',
+        proj:p.nome,projId:p.id,
+        dtPrev:d.dtPrev,dtExec:d.dtExec,obs:d.obs||''
+      });
+    });
+  });
+
+  var html='<div style="display:grid;grid-template-columns:repeat('+cols.length+',minmax(220px,1fr));gap:10px;">';
+  cols.forEach(function(col){
+    var colItems=items.filter(function(it){return it.status===col.val;});
+    html+='<div class="kan-col-wrap">';
+    html+='<div class="kan-col-hdr" style="background:'+col.bg+';color:'+col.tc+';">'
+      +'<span>'+col.label+'</span>'
+      +'<span style="background:rgba(0,0,0,0.1);border-radius:4px;padding:1px 6px;font-size:9.5px;">'+colItems.length+'</span>'
+      +'</div>';
+    colItems.forEach(function(it){
+      var td=today();
+      var atrasado=it.dtPrev&&it.dtPrev<td&&it.status!=='sg-conc';
+      html+='<div class="kan-card-d">';
+      html+='<div style="font-size:11.5px;font-weight:600;color:var(--text-dark);margin-bottom:3px;">📄 '+it.label+'</div>';
+      html+='<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px;">'
+        +'<span style="font-size:9.5px;background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;">'+it.proj+'</span>';
+      if(atrasado)html+='<span style="font-size:9.5px;background:var(--red-bg);color:var(--red);padding:1px 6px;border-radius:4px;">Atrasado</span>';
+      html+='</div>';
+      if(it.dtPrev)html+='<div style="font-size:9px;color:var(--text-muted);margin-bottom:3px;">Prazo: '+fmtD(it.dtPrev)+'</div>';
+      if(it.dtExec)html+='<div style="font-size:9px;color:var(--green);margin-bottom:3px;">Concluído: '+fmtD(it.dtExec)+'</div>';
+      html+='<select style="font-size:10px;width:100%;border:1px solid var(--border);border-radius:5px;padding:2px 4px;background:var(--surface2);cursor:pointer;margin-top:4px;" data-docid="'+it.id+'" onchange="dcChangeStatus(this)">'
+        +cols.map(function(col2){return '<option value="'+col2.val+'"'+(it.status===col2.val?' selected':'')+'>'+col2.label+'</option>';}).join('')
+        +'</select>';
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  if(!items.length) html='<div style="font-size:11px;color:var(--text-muted);padding:20px;text-align:center;background:var(--surface2);border-radius:7px;">Nenhum documento cadastrado ainda.</div>';
+  board.innerHTML=html;
+}
+
+function dcChangeStatus(sel){
+  var docId=sel.dataset.docid;
+  var newStatus=sel.value;
+  var found=false;
+  PROJETOS.forEach(function(p){
+    if(found)return;
+    var dm=p.data.find(function(m){return m.area==='docs';});if(!dm||!dm.children)return;
+    dm.children.forEach(function(d){
+      if(d.id===docId){
+        d.status=newStatus;
+        if(newStatus==='sg-conc'&&!d.dtExec) d.dtExec=today();
+        found=true;
+        dbSalvarProjeto(p);
+      }
+    });
+  });
+  renderKanDocs();
+}
+
 function renderHomeEntregas(){
   var el=document.getElementById('home-entregas-wrap');if(!el)return;
   var td=today();
@@ -4218,6 +4318,7 @@ function applyViewerMode(){
     // Desabilitar todos os inputs e selects
     'input[type="date"], input[type="text"], input[type="number"], input[type="password"],',
     'textarea, select.sf-sel, select.sf-status, .hmst-sel, select[onchange*="kcChange"],',
+    'select[onchange*="dcChangeStatus"],',
     'select[onchange*="hmSt"], select[onchange*="sfChange"] {',
     '  pointer-events:none !important;',
     '  opacity:0.6 !important;',
@@ -4237,7 +4338,8 @@ function applyViewerMode(){
     'saveCell','salvarAtivo','wizCreate','openWiz','openEditWiz','openWizRollout',
     'askDel','addAtivoMo','tryAdminTab','backupFirebase',
     'dbSalvarWhatsContatos','whatsContatoAdd','whatsContatoRemover',
-    'dbSalvarReprogHist','registrarReprog','confirmarReprog'
+    'dbSalvarReprogHist','registrarReprog','confirmarReprog',
+    'dcChangeStatus'
   ];
   _bloqueadas.forEach(function(fn){
     if(typeof window[fn] === 'function'){
