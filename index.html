@@ -1060,6 +1060,8 @@ table.pmo tr:last-child td{border-bottom:none;}
         <div class="ms-wrap" id="ms-kd-proj-wrap"><div class="ms-btn" onclick="msToggle('ms-kd-proj')"><span class="ms-btn-lbl" id="ms-kd-proj-lbl">Todos</span><span class="ms-btn-arrow">▾</span></div><div class="ms-dropdown" id="ms-kd-proj"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="msSearch(this,'ms-kd-proj')"></div><div class="ms-opts" id="ms-kd-proj-opts"></div><div class="ms-footer"><button onclick="msClear('ms-kd-proj');renderKanDocs()">Limpar</button><span class="ms-count" id="ms-kd-proj-cnt"></span></div></div></div>
         <span class="kan-filter-lbl">Comercial:</span>
         <div class="ms-wrap" id="ms-kd-com-wrap"><div class="ms-btn" onclick="msToggle('ms-kd-com')"><span class="ms-btn-lbl" id="ms-kd-com-lbl">Todos</span><span class="ms-btn-arrow">▾</span></div><div class="ms-dropdown" id="ms-kd-com"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="msSearch(this,'ms-kd-com')"></div><div class="ms-opts" id="ms-kd-com-opts"></div><div class="ms-footer"><button onclick="msClear('ms-kd-com');renderKanDocs()">Limpar</button><span class="ms-count" id="ms-kd-com-cnt"></span></div></div></div>
+        <span class="kan-filter-lbl">Equipamento:</span>
+        <div class="ms-wrap" id="ms-kd-equip-wrap"><div class="ms-btn" onclick="msToggle('ms-kd-equip')"><span class="ms-btn-lbl" id="ms-kd-equip-lbl">Todos</span><span class="ms-btn-arrow">▾</span></div><div class="ms-dropdown" id="ms-kd-equip"><div class="ms-search"><input type="text" placeholder="Buscar..." oninput="msSearch(this,'ms-kd-equip')"></div><div class="ms-opts" id="ms-kd-equip-opts"></div><div class="ms-footer"><button onclick="msClear('ms-kd-equip');renderKanDocs()">Limpar</button><span class="ms-count" id="ms-kd-equip-cnt"></span></div></div></div>
       </div>
     </div>
     <div id="kan-docs-board" style="padding:0 20px 20px;overflow-x:auto;"></div>
@@ -1352,6 +1354,56 @@ function mkAtivo(num,mobPrev,pers,cond){
   pers.forEach(p=>{const pn={id:nid(),_pers:true,label:p,status:'sp-req',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:''};expState[pn.id]=true;n.personalizacoes.push(pn);});
   return n;
 }
+// ── DOCUMENTAÇÃO: aplica a "todos os equipamentos" ou famílias específicas ──
+function familiasWD(){
+  return (WD.equips||[]).filter(function(e){return e.tipo&&e.modelo&&e.qtd>0;}).map(function(e){
+    return {key:e.tipo+'|'+e.modelo, label:(e.tipo+' '+e.modelo).trim()};
+  });
+}
+function wdDocSetTodos(i){
+  WD.docs[i].aplicaA='todos';
+  renderWiz();
+}
+function wdDocToggleFamilia(i,key){
+  var d=WD.docs[i];
+  var arr=Array.isArray(d.aplicaA)?d.aplicaA.slice():[];
+  if(d.aplicaA==='todos') arr=[];
+  var idx=arr.indexOf(key);
+  if(idx>=0) arr.splice(idx,1); else arr.push(key);
+  d.aplicaA=arr;
+  renderWiz();
+}
+function wizDocsHtml(){
+  var familias=familiasWD();
+  var docs=WD.docs||[];
+  var html='<div class="info-box">Documentos exigidos com prazo máximo de entrega. Cada documento é gerado para <strong>cada máquina (ativo)</strong> do projeto — se marcar "Todos os equipamentos", toda máquina recebe uma linha desse documento; se marcar uma família específica (ex: Comboio), só as máquinas dessa família recebem.</div>';
+  html+='<div id="docs-list">';
+  if(!docs.length){
+    html+='<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center;background:var(--surface2);border-radius:7px;">Nenhum documento adicionado.</div>';
+  }
+  docs.forEach(function(d,i){
+    var isTodos=(!d.aplicaA||d.aplicaA==='todos');
+    html+='<div style="border:1px solid var(--border-soft);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--surface2);">';
+    html+='<div style="display:grid;grid-template-columns:1fr 135px 24px;gap:6px;align-items:center;margin-bottom:8px;">';
+    html+='<input class="winput" style="margin-bottom:0;" value="'+(d.nome||'')+'" placeholder="Nome do documento..." onchange="WD.docs['+i+'].nome=this.value">';
+    html+='<input class="winput" type="date" style="margin-bottom:0;" value="'+(d.prazo||'')+'" onchange="WD.docs['+i+'].prazo=this.value">';
+    html+=(docs.length>1?'<button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;" onclick="WD.docs.splice('+i+',1);renderWiz()">×</button>':'<span></span>');
+    html+='</div>';
+    html+='<div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">Aplica a:</div>';
+    html+='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    html+='<button type="button" onclick="wdDocSetTodos('+i+')" style="font-size:10.5px;padding:3px 10px;border-radius:12px;cursor:pointer;border:1px solid '+(isTodos?'var(--accent)':'var(--border)')+';background:'+(isTodos?'var(--accent)':'var(--white)')+';color:'+(isTodos?'#fff':'var(--text-dim)')+';">Todos os equipamentos</button>';
+    familias.forEach(function(f){
+      var sel=!isTodos&&Array.isArray(d.aplicaA)&&d.aplicaA.indexOf(f.key)>=0;
+      html+='<button type="button" onclick="wdDocToggleFamilia('+i+',\''+f.key.replace(/'/g,"\\'")+'\')" style="font-size:10.5px;padding:3px 10px;border-radius:12px;cursor:pointer;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'var(--white)')+';color:'+(sel?'#fff':'var(--text-dim)')+';">'+f.label+'</button>';
+    });
+    if(!familias.length) html+='<span style="font-size:10px;color:var(--text-muted);">Cadastre os equipamentos na etapa anterior para escolher famílias específicas.</span>';
+    html+='</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  html+='<button onclick="WD.docs.push({nome:\'\',prazo:\'\',aplicaA:\'todos\'});renderWiz()" style="background:none;border:1px dashed var(--border);border-radius:6px;width:100%;padding:6px;font-size:11px;color:var(--text-dim);cursor:pointer;margin-top:3px;">+ Adicionar documento</button>';
+  return html;
+}
 function mkModelo(tipo,modelo,qtd,mobPrev,pers,vlrUnit,cond,capex){
   const label=tipo+' — '+modelo;
   const sg={id:nid(),_sg:true,label:null,cond,_flat:true,ativos:[]};expState[sg.id]=true;
@@ -1373,7 +1425,7 @@ function wdReset(){WD={nome:'',cliente:'',local:'',contrato:'',mob:'',comercial:
   equips:[{tipo:'',modelo:'',cond:'nova',qtd:1,vlrUnit:0,capex:0,mobPrev:'',pers:false,persList:[]}],
   temContrat:null,cargos:'',prazoRH:'',ferramental:'',mecanicos:'',lider:'',
   veiculo:null,veiculoTipo:'',veiculoQtd:1,container:null,containerObs:'',outros:'',
-  docs:[{nome:'ART',prazo:''},{nome:'Plano de Manutenção',prazo:''},{nome:'Laudo eletromecânico',prazo:''},{nome:'Última Preventiva',prazo:''}]};}
+  docs:[{nome:'ART',prazo:'',aplicaA:'todos'},{nome:'Plano de Manutenção',prazo:'',aplicaA:'todos'},{nome:'Laudo eletromecânico',prazo:'',aplicaA:'todos'},{nome:'Última Preventiva',prazo:'',aplicaA:'todos'}]};}
 wdReset();
 function openWiz(){
   wizMode='impl';
@@ -1446,25 +1498,7 @@ function renderWizStep0(cont){
 
 
 function renderWizStepDocs(cont){
-  // Reutiliza o step de docs (step 4) da implantação
-  // Renderizado via renderWiz internamente quando wizStep===4 no modo implantação
-  // Para rollout chamamos diretamente o mesmo HTML
-  var docs=WD.docs||[];
-  var html='<div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;">Informe os documentos necessários para o rollout.</div>';
-  html+='<div id="docs-list">';
-  if(!docs.length){
-    html+='<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center;background:var(--surface2);border-radius:7px;">Nenhum documento adicionado. Clique em "+ Adicionar" abaixo.</div>';
-  }
-  docs.forEach(function(d,i){
-    html+='<div style="display:grid;grid-template-columns:1fr 140px auto;gap:8px;align-items:end;margin-bottom:8px;">';
-    html+='<div><label class="wlabel">Documento</label><input class="winput" value="'+(d.nome||'')+'" placeholder="Ex: ART, PPRA, PCMSO..." onchange="WD.docs['+i+'].nome=this.value"></div>';
-    html+='<div><label class="wlabel">Prazo</label><input class="winput" type="date" value="'+(d.prazo||'')+'" onchange="WD.docs['+i+'].prazo=this.value"></div>';
-    html+='<button onclick="WD.docs.splice('+i+',1);renderWiz()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;margin-bottom:2px;">×</button>';
-    html+='</div>';
-  });
-  html+='</div>';
-  html+='<button onclick="rqAddDoc()" style="background:none;border:1px dashed var(--border);color:var(--text-muted);border-radius:7px;padding:8px 16px;cursor:pointer;width:100%;font-size:12px;margin-top:4px;">+ Adicionar documento</button>';
-  cont.innerHTML=html;
+  cont.innerHTML='<div>'+wizDocsHtml()+'</div>';
 }
 
 function renderWizStepRevisaoRollout(cont){
@@ -1568,6 +1602,30 @@ function wizCreate(){
   // Salvar no Firebase
   if(projParaSalvar) dbSalvarProjeto(projParaSalvar);
 }
+// Gera a área de Documentação com 1 grupo por ativo (máquina) — cada grupo mostra o
+// código do ativo (ao vivo, via ativoId) e recebe os documentos aplicáveis à sua família.
+function buildDocsMacro(modelos,base){
+  const docs={id:nid(),_macro:true,area:'docs',label:'Documentação',icon:'📄',children:[]};expState[docs.id]=true;
+  var ativosComFamilia=[];
+  (modelos||[]).forEach(function(mo){
+    (mo.subgrupos||[]).forEach(function(sg){
+      (sg.ativos||[]).forEach(function(a){
+        ativosComFamilia.push({ativo:a,familia:(mo.tipo+'|'+mo.modelo)});
+      });
+    });
+  });
+  ativosComFamilia.forEach(function(x){
+    var grupo=mkNode(x.ativo.label,{_docGroup:true,ativoId:x.ativo.id});
+    expState[grupo.id]=true;
+    (WD.docs||[]).filter(function(d){return d.nome;}).forEach(function(d){
+      var aplicaTodos=!d.aplicaA||d.aplicaA==='todos';
+      var aplica=aplicaTodos||(Array.isArray(d.aplicaA)&&d.aplicaA.indexOf(x.familia)>=0);
+      if(aplica) grupo.children.push(mkNode(d.nome,{dtPrev:d.prazo||addDays(base,-7)}));
+    });
+    docs.children.push(grupo);
+  });
+  return docs;
+}
 function buildDataRollout(){
   // Estrutura igual ao buildData mas só frota + docs
   // Sem RH, apoio, logística
@@ -1576,11 +1634,7 @@ function buildDataRollout(){
     const pers2=e.pers?e.persList:[];return mkModelo(e.tipo,e.modelo,parseInt(e.qtd)||1,e.mobPrev||'',pers2,0,e.cond||'nova',parseFloat(e.capex)||0);
   });
   const frota={id:nid(),_macro:true,area:'frota',label:'🔄 Frota Rollout',modelos};
-  const docs={id:nid(),_macro:true,area:'docs',label:'📄 Documentação',children:
-    (WD.docs||[]).filter(function(d){return d.nome;}).map(function(d){
-      return mkNode(d.nome,{dtPrev:d.prazo||addDays(mob,-7)});
-    })
-  };
+  const docs=buildDocsMacro(modelos,mob);
   return [frota,docs];
 }
 
@@ -1597,9 +1651,7 @@ function buildData(){
   if(WD.temContrat===true){['Abertura de requisição de RH','Processo seletivo','Integração e treinamento','Solicitação de ferramental'].forEach((l,i)=>rh.children.push(mkNode(l,{dtPrev:addDays(base,-35+i*8)})));}
   else{rh.children.push(mkNode('Designação de mecânico',{dtPrev:addDays(base,-30),mecanico:WD.mecanicos,responsavel:WD.lider}));rh.children.push(mkNode('Comunicação à equipe',{dtPrev:addDays(base,-25),mecanico:WD.mecanicos,responsavel:WD.lider}));}
   rh.children.push(mkNode('Mobilização do mecânico',{dtPrev:addDays(base,-5),mecanico:WD.mecanicos,responsavel:WD.lider}));data.push(rh);
-  const docs={id:nid(),_macro:true,area:'docs',label:'Documentação',icon:'📄',children:[]};expState[docs.id]=true;
-  WD.docs.filter(d=>d.nome).forEach(d=>docs.children.push(mkNode(d.nome,{dtPrev:d.prazo||addDays(base,-7)})));
-  if(!docs.children.length)docs.children.push(mkNode('ART de responsabilidade técnica',{dtPrev:addDays(base,-15)}));
+  const docs=buildDocsMacro(fm.modelos,base);
   data.push(docs);
   const apoio={id:nid(),_macro:true,area:'apoio',label:'Apoio e logística',icon:'🚛',children:[]};expState[apoio.id]=true;
   if(WD.veiculo===true)apoio.children.push(mkNode('Locação veículo leve — '+(WD.veiculoTipo||'Pickup'),{dtPrev:addDays(base,-10)}));
@@ -1755,8 +1807,7 @@ function renderWiz(){
   } else if(wizStep===3){
     c.innerHTML=`<div class="wbox"><label class="wlabel">Necessário veículo leve de apoio?</label><div style="display:flex;gap:8px;margin-bottom:10px;"><button class="yn yes${WD.veiculo===true?' on':''}" onclick="WD.veiculo=true;renderWiz()">Sim</button><button class="yn no${WD.veiculo===false?' on':''}" onclick="WD.veiculo=false;renderWiz()">Não</button></div>${WD.veiculo===true?`<div class="wr" style="margin-bottom:10px;"><div><label class="wlabel">Tipo</label><input class="winput" value="${WD.veiculoTipo}" placeholder="Pickup, Van..." onchange="WD.veiculoTipo=this.value"></div><div><label class="wlabel">Qtd.</label><input class="winput" type="number" min="1" value="${WD.veiculoQtd}" onchange="WD.veiculoQtd=+this.value"></div></div>`:''}<label class="wlabel">Necessário container de peças?</label><div style="display:flex;gap:8px;margin-bottom:10px;"><button class="yn yes${WD.container===true?' on':''}" onclick="WD.container=true;renderWiz()">Sim</button><button class="yn no${WD.container===false?' on':''}" onclick="WD.container=false;renderWiz()">Não</button></div>${WD.container===true?`<label class="wlabel">Observações</label><textarea class="winput" rows="2" onchange="WD.containerObs=this.value">${WD.containerObs}</textarea>`:''}<label class="wlabel">Outros itens</label><textarea class="winput" rows="2" placeholder="EPIs, licenças..." onchange="WD.outros=this.value">${WD.outros}</textarea></div>`;
   } else if(wizStep===4){
-    const dr=WD.docs.map((d,i)=>`<div style="display:grid;grid-template-columns:1fr 135px 24px;gap:6px;margin-bottom:5px;align-items:center;"><input class="winput" style="margin-bottom:0;" value="${d.nome}" placeholder="Nome do documento..." onchange="WD.docs[${i}].nome=this.value"><input class="winput" type="date" style="margin-bottom:0;" value="${d.prazo}" onchange="WD.docs[${i}].prazo=this.value">${WD.docs.length>1?`<button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;" onclick="WD.docs.splice(${i},1);renderWiz()">×</button>`:'<span></span>'}</div>`).join('');
-    c.innerHTML=`<div class="wbox"><div class="info-box">Liste os documentos exigidos com prazo máximo de entrega.</div><div style="display:grid;grid-template-columns:1fr 135px 24px;gap:6px;font-size:10px;color:var(--text-muted);margin-bottom:5px;"><span>Documento</span><span>Prazo máximo</span><span></span></div>${dr}<button onclick="WD.docs.push({nome:'',prazo:''});renderWiz()" style="background:none;border:1px dashed var(--border);border-radius:6px;width:100%;padding:6px;font-size:11px;color:var(--text-dim);cursor:pointer;margin-top:3px;">+ Adicionar documento</button></div>`;
+    c.innerHTML='<div class="wbox">'+wizDocsHtml()+'</div>';
   } else {
     const vlrTotal=WD.equips.reduce((s,e)=>s+((+e.vlrUnit||0)*(+e.qtd||1)),0);
     const te=WD.equips.reduce((s,e)=>s+(+e.qtd||1),0);
@@ -2531,6 +2582,31 @@ function addAtivoMo(moId){
   sg.ativos.push(novoAtivo);
   mo.qtd=sg.ativos.length; // atualiza contagem
   expState[moId]=true;expState[sg.id]=true;expState[novoAtivo.id]=true;
+  // Espelha a documentação: novo ativo recebe os mesmos documentos que os demais da mesma família (tipo+modelo)
+  let dm=p.data.find(function(m){return m.area==='docs';});
+  if(!dm){
+    // Projeto antigo sem a área de Documentação ainda — cria agora
+    dm={id:nid(),_macro:true,area:'docs',label:'Documentação',icon:'📄',children:[]};
+    expState[dm.id]=true;
+    p.data.push(dm);
+  }
+  {
+    if(!dm.children)dm.children=[];
+    // IDs de todos os ativos dessa família (mesmo modelo), pra achar QUALQUER um que já tenha documentação
+    var idsDaFamilia={};
+    (mo.subgrupos||[]).forEach(function(s2){(s2.ativos||[]).forEach(function(a2){if(a2.id!==novoAtivo.id)idsDaFamilia[a2.id]=true;});});
+    var docsTemplate=[];
+    var grupoModelo=dm.children.find(function(g){return g.ativoId&&idsDaFamilia[g.ativoId]&&g.children&&g.children.length;});
+    if(grupoModelo) docsTemplate=grupoModelo.children.map(function(d){return {nome:d.label,prazo:d.dtPrev};});
+    // Fallback: se não achou nenhum modelo de documentação (família nova/sem histórico), usa a lista padrão
+    if(!docsTemplate.length){
+      docsTemplate=['ART','Plano de Manutenção','Laudo eletromecânico','Última Preventiva'].map(function(n){return {nome:n,prazo:''};});
+    }
+    var novoGrupo=mkNode(novoAtivo.label,{_docGroup:true,ativoId:novoAtivo.id});
+    docsTemplate.forEach(function(t){novoGrupo.children.push(mkNode(t.nome,{dtPrev:t.prazo||''}));});
+    expState[novoGrupo.id]=true;
+    dm.children.push(novoGrupo);
+  }
   renderLista();renderKPIs();
   dbSalvarProjeto(p);
 }
@@ -2541,12 +2617,29 @@ function remAtivoMo(moId){
   const mo=findG(moId);if(!mo)return;
   const sg=mo.subgrupos&&mo.subgrupos[0];if(!sg||sg.ativos.length===0)return;
   if(!confirm('Remover o último ativo de '+mo.label+'? Os dados deste ativo serão perdidos.'))return;
-  sg.ativos.pop();
+  const removido=sg.ativos.pop();
   mo.qtd=sg.ativos.length;
+  // Remove também o grupo de documentação correspondente
+  const dm=p.data.find(function(m){return m.area==='docs';});
+  if(dm&&dm.children&&removido){
+    var idx=dm.children.findIndex(function(g){return g.ativoId===removido.id;});
+    if(idx>=0) dm.children.splice(idx,1);
+  }
   renderLista();renderKPIs();
   dbSalvarProjeto(p);
 }
 function addPersA(aId){const l=prompt('Personalização:');if(!l)return;const a=findG(aId);if(!a)return;if(!a.personalizacoes)a.personalizacoes=[];const pn={id:nid(),_pers:true,label:l,status:'sp-req',dtPrev:'',dtProg:'',dtReprog:'',dtExec:'',prcOrc:'',prcExec:'',obs:''};expState[pn.id]=true;a.personalizacoes.push(pn);expState[aId]=true;renderLista();const _pp=getProj();if(_pp)dbSalvarProjeto(_pp);}
+function addDocA(grupoId){
+  const l=prompt('Nome do documento:');if(!l)return;
+  const grupo=findG(grupoId);if(!grupo)return;
+  if(!grupo.children)grupo.children=[];
+  const dn=mkNode(l,{});
+  expState[dn.id]=true;
+  grupo.children.push(dn);
+  expState[grupoId]=true;
+  renderLista();
+  const _pp=getProj();if(_pp)dbSalvarProjeto(_pp);
+}
 function inpName(id,val,w){
   const dlId='dl-'+id;
   const dl=FROTA_CATALOG.length?`<datalist id="${dlId}">${FROTA_CATALOG.map(a=>`<option value="${a.numAtivo}">${a.numAtivo} — ${a.tipo} ${a.modelo}</option>`).join('')}</datalist>`:'';
@@ -2627,6 +2720,15 @@ function renderLista(){
           });
           // botão + ativo agora está na linha do modelo
         });
+      });
+    }else if(macro.area==='docs'){
+      const mCols2=colsFor(macro.area);
+      macro.children.forEach(sub=>{
+        const sOpen=expState[sub.id];const hC=sub.children&&sub.children.length>0;
+        const ativoRef=sub.ativoId?findG(sub.ativoId):null;
+        const dispLabel=ativoRef?(ativoRef.label||'—'):(sub.label||'Ativo removido');
+        rows+=`<tr class="r-s1"><td class="scol" style="background:var(--surface2);"><div style="display:flex;align-items:center;gap:3px;padding-left:14px;">${hC?`<span class="chev ${sOpen?'open':''}" onclick="toggleExp('${sub.id}')">▶</span>`:'<span style="width:10px;display:inline-block;"></span>'} <span style="font-size:10px;color:var(--accent);">🔧</span><strong style="font-size:11.5px;">${dispLabel}</strong>${hC?`<span style="font-size:9.5px;color:var(--text-muted);margin-left:4px;">${sub.children.length} doc(s)</span>`:''}</div></td><td></td>${showFrota?'<td></td>':''}<td></td>${empN(mCols2.length-1)}<td style="white-space:nowrap;"><button class="add-btn" onclick="addDocA('${sub.id}')" title="Adicionar documento a este ativo">+ doc</button></td></tr>`;
+        if(sOpen&&hC)sub.children.forEach(c=>{rows+=`<tr class="r-s2"><td class="scol" style="background:var(--white);"><div style="display:flex;align-items:center;gap:3px;padding-left:28px;"><span style="width:10px;display:inline-block;"></span><span style="font-size:10px;color:var(--accent);margin-right:2px;">📄</span> ${inpName(c.id,c.label,130)}</div></td><td>${selSt(c.id,c.status,SG)}</td>${showFrota?'<td></td>':''}<td>${iD(c.id,'dtPrev',c.dtPrev,true)}</td>${dCells(c,mCols2.slice(1),SG)}<td><button class="add-btn" onclick="remLinha('${c.id}')" title="Remover documento" style="background:var(--red-bg);color:var(--red);border-color:var(--red);">🗑</button></td></tr>`;});
       });
     }else if(macro.children){
       const mCols2=colsFor(macro.area);
@@ -3341,10 +3443,31 @@ function openEditWiz(pid,ev){
     WD.veiculo  =ap.children.some(function(n){return n.label&&n.label.toLowerCase().includes('veículo');});
     WD.container=ap.children.some(function(n){return n.label&&n.label.toLowerCase().includes('container');});
   }
-  // Step 4: docs
+  // Step 4: docs — reconstrói agrupando por nome+prazo, inferindo se aplica a todos ou famílias específicas
   const dm=p.data.find(m=>m.area==='docs');
   if(dm&&dm.children&&dm.children.length){
-    WD.docs=dm.children.map(function(d){return{nome:d.label||'',prazo:d.dtPrev||''};});
+    var fmEdit=p.data.find(function(m){return m.area==='frota';});
+    var familiaPorAtivoEdit={};
+    if(fmEdit&&fmEdit.modelos)fmEdit.modelos.forEach(function(mo){
+      (mo.subgrupos||[]).forEach(function(sg){(sg.ativos||[]).forEach(function(a){familiaPorAtivoEdit[a.id]=mo.tipo+'|'+mo.modelo;});});
+    });
+    var todasFamilias=Object.keys(familiaPorAtivoEdit).map(function(k){return familiaPorAtivoEdit[k];}).filter(function(v,i,arr){return arr.indexOf(v)===i;});
+    var docsMap={};
+    dm.children.forEach(function(grupo){
+      var familia=grupo.ativoId?familiaPorAtivoEdit[grupo.ativoId]:'';
+      (grupo.children||[]).forEach(function(d){
+        var k=(d.label||'')+'|'+(d.dtPrev||'');
+        if(!docsMap[k]) docsMap[k]={nome:d.label||'',prazo:d.dtPrev||'',familias:{}};
+        if(familia) docsMap[k].familias[familia]=true;
+      });
+    });
+    WD.docs=Object.keys(docsMap).map(function(k){
+      var v=docsMap[k];
+      var famsComDoc=Object.keys(v.familias);
+      var aplicaTodos=todasFamilias.length>0&&todasFamilias.every(function(f){return famsComDoc.indexOf(f)>=0;});
+      return {nome:v.nome,prazo:v.prazo,aplicaA:aplicaTodos?'todos':famsComDoc};
+    });
+    if(!WD.docs.length) WD.docs=[{nome:'',prazo:'',aplicaA:'todos'}];
   }
   // Snapshot dos valores originais para comparação no save
   window._wizOriginal = {
@@ -4005,6 +4128,12 @@ function populateKanDocsFilters(){
   var coms=new Set();
   PROJETOS.forEach(function(p){if(p.comercial)coms.add(p.comercial);});
   msBuildOpts('ms-kd-com',[...coms],'Todos','renderKanDocs');
+  var equips=new Set();
+  PROJETOS.forEach(function(p){
+    var fm=p.data.find(function(m){return m.area==='frota';});if(!fm||!fm.modelos)return;
+    fm.modelos.forEach(function(mo){equips.add((mo.tipo+' '+mo.modelo).trim());});
+  });
+  msBuildOpts('ms-kd-equip',[...equips],'Todos','renderKanDocs');
 }
 
 function renderKanDocs(){
@@ -4013,6 +4142,7 @@ function renderKanDocs(){
 
   var pFils=msVals('ms-kd-proj');
   var cFils=msVals('ms-kd-com');
+  var eFils=msVals('ms-kd-equip');
 
   var cols=SG.map(function(s){
     var m={'sg-pend':{tc:'#8f4010',bg:'#faeada'},'sg-and':{tc:'#186090',bg:'#daeef8'},'sg-conc':{tc:'#1a5c20',bg:'#c8eccc'}}[s.val]||{tc:'#475569',bg:'#f1f5f9'};
@@ -4024,11 +4154,23 @@ function renderKanDocs(){
     if(pFils.length&&pFils.indexOf(p.id)<0)return;
     if(cFils.length&&cFils.indexOf(p.comercial||'')<0)return;
     var dm=p.data.find(function(m){return m.area==='docs';});if(!dm||!dm.children)return;
-    dm.children.forEach(function(d){
-      items.push({
-        id:d.id,label:d.label,status:d.status||'sg-pend',
-        proj:p.nome,projId:p.id,
-        dtPrev:d.dtPrev,dtExec:d.dtExec,obs:d.obs||''
+    // Mapa ativoId -> família (tipo+modelo), pra filtrar/etiquetar por equipamento
+    var familiaPorAtivo={};
+    var fm=p.data.find(function(m){return m.area==='frota';});
+    if(fm&&fm.modelos)fm.modelos.forEach(function(mo){
+      (mo.subgrupos||[]).forEach(function(sg){(sg.ativos||[]).forEach(function(a){familiaPorAtivo[a.id]=(mo.tipo+' '+mo.modelo).trim();});});
+    });
+    dm.children.forEach(function(grupo){
+      var ativoRef=grupo.ativoId?findInProj(p,grupo.ativoId):null;
+      var ativoLabel=ativoRef?ativoRef.label:grupo.label;
+      var familia=grupo.ativoId?(familiaPorAtivo[grupo.ativoId]||''):'';
+      if(eFils.length&&eFils.indexOf(familia)<0)return;
+      (grupo.children||[]).forEach(function(d){
+        items.push({
+          id:d.id,label:d.label,status:d.status||'sg-pend',
+          proj:p.nome,projId:p.id,ativo:ativoLabel,familia:familia,
+          dtPrev:d.dtPrev,dtExec:d.dtExec,obs:d.obs||''
+        });
       });
     });
   });
@@ -4046,8 +4188,10 @@ function renderKanDocs(){
       var atrasado=it.dtPrev&&it.dtPrev<td&&it.status!=='sg-conc';
       html+='<div class="kan-card-d">';
       html+='<div style="font-size:11.5px;font-weight:600;color:var(--text-dark);margin-bottom:3px;">📄 '+it.label+'</div>';
+      html+='<div style="font-size:10px;color:var(--accent);font-weight:500;margin-bottom:3px;">🔧 '+(it.ativo||'—')+'</div>';
       html+='<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px;">'
         +'<span style="font-size:9.5px;background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;">'+it.proj+'</span>';
+      if(it.familia)html+='<span style="font-size:9.5px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:4px;">'+it.familia+'</span>';
       if(atrasado)html+='<span style="font-size:9.5px;background:var(--red-bg);color:var(--red);padding:1px 6px;border-radius:4px;">Atrasado</span>';
       html+='</div>';
       if(it.dtPrev)html+='<div style="font-size:9px;color:var(--text-muted);margin-bottom:3px;">Prazo: '+fmtD(it.dtPrev)+'</div>';
@@ -4071,13 +4215,16 @@ function dcChangeStatus(sel){
   PROJETOS.forEach(function(p){
     if(found)return;
     var dm=p.data.find(function(m){return m.area==='docs';});if(!dm||!dm.children)return;
-    dm.children.forEach(function(d){
-      if(d.id===docId){
-        d.status=newStatus;
-        if(newStatus==='sg-conc'&&!d.dtExec) d.dtExec=today();
-        found=true;
-        dbSalvarProjeto(p);
-      }
+    dm.children.forEach(function(grupo){
+      if(found)return;
+      (grupo.children||[]).forEach(function(d){
+        if(d.id===docId){
+          d.status=newStatus;
+          if(newStatus==='sg-conc'&&!d.dtExec) d.dtExec=today();
+          found=true;
+          dbSalvarProjeto(p);
+        }
+      });
     });
   });
   renderKanDocs();
